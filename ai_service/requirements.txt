@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+appwrite
+python-dotenv
+pydantic
