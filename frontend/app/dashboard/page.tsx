@@ -48,15 +48,9 @@ export default function DashboardPage() {
         }
     };
 
-    const handleTaskUpdate = () => {
-        fetchData();
-    };
+    const handleTaskUpdate = () => fetchData();
+    const handleTaskDelete = () => fetchData();
 
-    const handleTaskDelete = () => {
-        fetchData();
-    };
-
-    // Get greeting based on time of day
     const getGreeting = () => {
         const hour = new Date().getHours();
         if (hour < 12) return "Good morning";
@@ -64,7 +58,6 @@ export default function DashboardPage() {
         return "Good evening";
     };
 
-    // Calculate weekly completion rate
     const calculateWeeklyCompletion = () => {
         if (weeklyData.length === 0) return 0;
         const totalCreated = weeklyData.reduce((sum, day) => sum + day.created, 0);
@@ -73,9 +66,8 @@ export default function DashboardPage() {
     };
 
     const weeklyCompletion = calculateWeeklyCompletion();
-    const productivityScore = stats?.completion_rate || weeklyCompletion || 85;
+    const productivityScore = stats?.completion_rate || weeklyCompletion || 0;
 
-    // Get greeting based on time
     const todayDate = new Date().toLocaleDateString("en-US", {
         weekday: "long",
         year: "numeric",
@@ -83,258 +75,223 @@ export default function DashboardPage() {
         day: "numeric",
     });
 
-    // Calculate days of week for chart
     const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const getDayName = (dateStr: string) => {
         const date = new Date(dateStr);
         return daysOfWeek[date.getDay()] || "";
     };
 
+    const totalTasks = stats?.total_tasks || tasks.length;
+    const completedTasks = stats?.completed_tasks || 0;
+    const inProgressTasks = totalTasks - completedTasks;
+    const dueTodayTasks = stats?.tasks_today || 0;
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
                 {/* Header */}
-                <header className="mb-8">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                {getGreeting()}, {user?.name?.split(" ")[0] || "there"}! 👋
-                            </h2>
-                            <p className="text-gray-600 dark:text-gray-400 mt-1">
-                                {todayDate}
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <NotificationsPanel />
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl flex items-center gap-2"
-                            >
-                                <span>+</span> New Task
-                            </button>
-                        </div>
+                <header className="mb-6 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+                            {getGreeting()}, {user?.name?.split(" ")[0] || "there"} 👋
+                        </h1>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{todayDate}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <NotificationsPanel />
+                        <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg font-medium hover:bg-indigo-700 transition flex items-center gap-1.5"
+                        >
+                            <span className="text-base leading-none">+</span> New Task
+                        </button>
                     </div>
                 </header>
 
-                {/* Loading State */}
                 {loading ? (
                     <div className="flex items-center justify-center h-64">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500"></div>
                     </div>
                 ) : (
-                    <div className="space-y-8">
-                        {/* Productivity Section - Redesigned */}
-                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            {/* Main Productivity Score */}
-                            <div className="lg:col-span-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg font-semibold opacity-90">Productivity Score</h3>
-                                    <span className="text-3xl">📊</span>
-                                </div>
-                                <div className="flex items-end gap-4">
-                                    <span className="text-6xl font-bold">{productivityScore}%</span>
-                                    <div className="mb-2 text-blue-100">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                            </svg>
-                                            <span>Great job!</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Progress Bar */}
-                                <div className="mt-6">
-                                    <div className="h-3 bg-white/20 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-white rounded-full transition-all duration-500"
-                                            style={{ width: `${productivityScore}%` }}
-                                        ></div>
-                                    </div>
-                                </div>
+                    <div className="space-y-6">
+
+                        {/* Top Row: Stats + Productivity + Weekly */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+
+                            {/* Stat Cards */}
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Tasks</p>
+                                <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalTasks}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Completed</p>
+                                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{completedTasks}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">In Progress</p>
+                                <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{inProgressTasks}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Due Today</p>
+                                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{dueTodayTasks}</p>
                             </div>
 
-                            {/* This Week Overview */}
-                            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">This Week</h3>
-                                    <span className="text-sm text-gray-500 dark:text-gray-400">Last 7 days</span>
+                            {/* Productivity Score - compact inline card */}
+                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 col-span-2">
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Completion Rate</p>
+                                    <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">{productivityScore}%</span>
                                 </div>
-                                {/* Weekly Chart */}
-                                <div className="flex items-end justify-between h-24 gap-2">
-                                    {weeklyData.length > 0 ? weeklyData.slice(-7).map((day, index) => {
-                                        const maxCompleted = Math.max(...weeklyData.map(d => d.completed), 1);
-                                        const height = (day.completed / maxCompleted) * 100;
-                                        return (
-                                            <div key={index} className="flex flex-col items-center gap-1 flex-1">
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                    {day.completed}
-                                                </div>
-                                                <div
-                                                    className="w-full max-w-[24px] bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md transition-all duration-300 hover:from-blue-700 hover:to-blue-500"
-                                                    style={{ height: `${Math.max(height, 10)}%` }}
-                                                ></div>
-                                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                    {getDayName(day.date)}
-                                                </span>
-                                            </div>
-                                        );
-                                    }) : (
-                                        // Empty state
-                                        daysOfWeek.map((day, index) => (
-                                            <div key={index} className="flex flex-col items-center gap-1 flex-1">
-                                                <div className="text-xs text-gray-400">0</div>
-                                                <div className="w-full max-w-[24px] bg-gray-100 dark:bg-gray-700 rounded-t-md" style={{ height: '10%' }}></div>
-                                                <span className="text-xs text-gray-400">{day}</span>
-                                            </div>
-                                        ))
-                                    )}
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                                        style={{ width: `${productivityScore}%` }}
+                                    />
                                 </div>
-                                {/* Summary Stats */}
-                                <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {weeklyData.reduce((sum, d) => sum + d.completed, 0)}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Completed</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {weeklyData.reduce((sum, d) => sum + d.created, 0)}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Created</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-green-600">
-                                            {weeklyCompletion}%
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Rate</div>
-                                    </div>
-                                </div>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                                    {completedTasks} of {totalTasks} tasks done
+                                </p>
                             </div>
                         </div>
 
-                        {/* Stats Cards Row */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                        <span className="text-xl">📋</span>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {stats?.total_tasks || tasks.length}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Total Tasks</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                                        <span className="text-xl">✅</span>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {stats?.completed_tasks || 0}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Completed</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                                        <span className="text-xl">⏳</span>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {(stats?.total_tasks || tasks.length) - (stats?.completed_tasks || 0)}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">In Progress</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                                        <span className="text-xl">🔥</span>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                            {stats?.tasks_today || 0}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Due Today</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Error Message */}
+                        {/* Error */}
                         {error && (
-                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400">
+                            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg text-sm text-amber-700 dark:text-amber-400">
                                 {error}
                             </div>
                         )}
 
-                        {/* Main Content Grid */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {/* Left Column - Urgent Tasks */}
-                            <div className="lg:col-span-1">
-                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <div className="p-4 bg-gradient-to-r from-orange-500 to-red-500">
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                            <span>⚡</span> Urgent Tasks
-                                        </h3>
+                        {/* Main Content: Urgent Tasks + All Tasks + Weekly */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                            {/* Left: Urgent Tasks + Weekly Chart */}
+                            <div className="space-y-4">
+                                {/* Urgent Tasks */}
+                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Urgent Tasks</h3>
+                                        <span className="text-xs text-gray-400">{tasks.filter(t => t.status !== 'completed').length} pending</span>
                                     </div>
-                                    <div className="p-4">
+                                    <div className="p-3 space-y-1.5">
                                         {tasks
                                             .filter(t => t.status !== 'completed')
                                             .sort((a, b) => a.priority - b.priority)
                                             .slice(0, 5)
-                                            .map((task, index) => (
+                                            .map((task) => (
                                                 <div
                                                     key={task.id}
-                                                    className="flex items-center gap-3 p-3 mb-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                                    className="flex items-center gap-2.5 p-2.5 bg-gray-50 dark:bg-gray-700/40 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                                                 >
-                                                    <div className={`w-2 h-2 rounded-full ${task.priority === 1 ? 'bg-red-500' :
-                                                        task.priority === 2 ? 'bg-orange-500' :
-                                                            task.priority === 3 ? 'bg-yellow-500' : 'bg-green-500'
-                                                        }`}></div>
+                                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${task.priority === 1 ? 'bg-red-400' :
+                                                        task.priority === 2 ? 'bg-amber-400' :
+                                                            task.priority === 3 ? 'bg-yellow-400' : 'bg-gray-300'
+                                                        }`} />
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-medium text-gray-900 dark:text-white truncate">
-                                                            {task.title}
-                                                        </p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                            Due: {new Date(task.deadline).toLocaleDateString()}
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+                                                                {task.title}
+                                                            </p>
+                                                            <span className="text-[10px] font-bold text-indigo-500/80 uppercase">P{task.priority}</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                                                            {new Date(task.deadline).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <span className={`text-xs px-2 py-1 rounded-full ${task.category === 'academic' ? 'bg-blue-100 text-blue-700' :
-                                                        task.category === 'personal' ? 'bg-green-100 text-green-700' :
-                                                            'bg-purple-100 text-purple-700'
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded-md flex-shrink-0 ${task.category === 'academic' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                        task.category === 'personal' ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
+                                                            'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
                                                         }`}>
                                                         {task.category}
                                                     </span>
                                                 </div>
                                             ))}
                                         {tasks.filter(t => t.status !== 'completed').length === 0 && (
-                                            <p className="text-center text-gray-500 dark:text-gray-400 py-4">
-                                                No urgent tasks! 🎉
+                                            <p className="text-center text-sm text-gray-400 dark:text-gray-500 py-4">
+                                                All caught up! 🎉
                                             </p>
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Weekly Chart */}
+                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">This Week</h3>
+                                        <span className="text-xs text-gray-400">{weeklyCompletion}% rate</span>
+                                    </div>
+                                    <div className="flex items-end justify-between h-16 gap-1">
+                                        {weeklyData.length > 0 ? weeklyData.slice(-7).map((day, index) => {
+                                            const maxCompleted = Math.max(...weeklyData.map(d => d.completed), 1);
+                                            const height = (day.completed / maxCompleted) * 100;
+                                            return (
+                                                <div key={index} className="flex flex-col items-center gap-0.5 flex-1">
+                                                    <div
+                                                        className="w-full max-w-[20px] bg-indigo-200 dark:bg-indigo-800 hover:bg-indigo-400 dark:hover:bg-indigo-600 rounded-sm transition"
+                                                        style={{ height: `${Math.max(height, 8)}%` }}
+                                                    />
+                                                    <span className="text-[10px] text-gray-400">{getDayName(day.date)}</span>
+                                                </div>
+                                            );
+                                        }) : daysOfWeek.map((day, index) => (
+                                            <div key={index} className="flex flex-col items-center gap-0.5 flex-1">
+                                                <div className="w-full max-w-[20px] bg-gray-100 dark:bg-gray-700 rounded-sm" style={{ height: '8%' }} />
+                                                <span className="text-[10px] text-gray-400">{day}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-50 dark:border-gray-700">
+                                        <div>
+                                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">
+                                                {weeklyData.reduce((sum, d) => sum + d.completed, 0)}
+                                            </p>
+                                            <p className="text-xs text-gray-400">Completed</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">
+                                                {weeklyData.reduce((sum, d) => sum + d.created, 0)}
+                                            </p>
+                                            <p className="text-xs text-gray-400">Created</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Quick Links */}
+                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Quick Access</h3>
+                                    </div>
+                                    <div className="divide-y divide-gray-50 dark:divide-gray-700">
+                                        {[
+                                            { href: "/dashboard/calendar", icon: "📅", label: "Calendar", desc: "View tasks on calendar" },
+                                            { href: "/dashboard/schedule", icon: "⚡", label: "Schedule", desc: "Optimize your day" },
+                                            { href: "/dashboard/analytics", icon: "📊", label: "Analytics", desc: "Productivity insights" },
+                                        ].map(link => (
+                                            <a
+                                                key={link.href}
+                                                href={link.href}
+                                                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
+                                            >
+                                                <span className="text-lg">{link.icon}</span>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{link.label}</p>
+                                                    <p className="text-xs text-gray-400">{link.desc}</p>
+                                                </div>
+                                                <svg className="w-4 h-4 text-gray-300 dark:text-gray-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Right Column - All Tasks */}
+                            {/* Right: All Tasks (takes up 2/3) */}
                             <div className="lg:col-span-2">
-                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                            <span>📋</span> All Tasks
-                                        </h3>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                                            {tasks.length} total
-                                        </span>
+                                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                                    <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">All Tasks</h3>
+                                        <span className="text-xs text-gray-400">{tasks.length} total</span>
                                     </div>
                                     <div className="p-4">
                                         <TaskList
@@ -347,62 +304,9 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Quick Actions */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <a
-                                href="/dashboard/calendar"
-                                className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl group-hover:scale-110 transition">📅</span>
-                                    <div>
-                                        <h4 className="font-medium text-gray-900 dark:text-white">
-                                            Calendar View
-                                        </h4>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            View tasks on calendar
-                                        </p>
-                                    </div>
-                                </div>
-                            </a>
-                            <a
-                                href="/dashboard/schedule"
-                                className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl group-hover:scale-110 transition">⚡</span>
-                                    <div>
-                                        <h4 className="font-medium text-gray-900 dark:text-white">
-                                            Schedule Manager
-                                        </h4>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            Optimize your day
-                                        </p>
-                                    </div>
-                                </div>
-                            </a>
-                            <a
-                                href="/dashboard/analytics"
-                                className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl group-hover:scale-110 transition">📊</span>
-                                    <div>
-                                        <h4 className="font-medium text-gray-900 dark:text-white">
-                                            Analytics
-                                        </h4>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            View productivity insights
-                                        </p>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
                     </div>
                 )}
 
-                {/* Create Task Modal */}
                 <CreateTaskModal
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}

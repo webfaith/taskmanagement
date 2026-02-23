@@ -16,9 +16,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const userId = typeof window !== 'undefined' ? localStorage.getItem('user_id') : null;
     return {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(userId ? { 'x-user-id': userId } : {}),
     };
 };
 

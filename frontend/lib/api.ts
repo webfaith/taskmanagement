@@ -187,6 +187,14 @@ class ApiClient {
     async getTaskSuggestions(): Promise<{ task_id: string; suggestion: string; priority: number }[]> {
         return this.request<{ task_id: string; suggestion: string; priority: number }[]>('/ai/task-suggestions');
     }
+
+    async generateReminders(): Promise<{ reminders_created: number; message: string }> {
+        return this.request('/notifications/generate-reminders', { method: 'POST' });
+    }
+
+    async getPrioritizedTasks(): Promise<any[]> {
+        return this.request<any[]>('/tasks/prioritized');
+    }
 }
 
 export const apiClient = new ApiClient();

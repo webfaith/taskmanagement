@@ -178,6 +178,46 @@ def get_user_id(x_user_id: Optional[str] = Header(None)) -> str:
         raise HTTPException(status_code=401, detail="User ID required in header")
     return x_user_id
 
+
+def calculate_priority(deadline: datetime, estimated_hours: float, category: str) -> int:
+    """
+    AI Rule-Based Priority Assignment
+    Returns 1 (Critical) to 5 (Very Low) based on:
+    - Deadline urgency (hours until deadline)
+    - Estimated effort (hours)
+    - Task category weight
+    """
+    now = datetime.now()
+    # Strip timezone info if present for comparison
+    if deadline.tzinfo is not None:
+        deadline = deadline.replace(tzinfo=None)
+    hours_until_deadline = (deadline - now).total_seconds() / 3600
+
+    # Base priority from deadline urgency
+    if hours_until_deadline <= 0:
+        base_priority = 1          # Overdue → Critical
+    elif hours_until_deadline <= 24:
+        base_priority = 1          # Due within 24h → Critical
+    elif hours_until_deadline <= 72:
+        base_priority = 2          # Due within 3 days → High
+    elif hours_until_deadline <= 168:
+        base_priority = 3          # Due within 7 days → Medium
+    elif hours_until_deadline <= 336:
+        base_priority = 4          # Due within 14 days → Low
+    else:
+        base_priority = 5          # Due beyond 14 days → Very Low
+
+    # Effort modifier: heavy tasks get bumped up by 1 level
+    if estimated_hours > 5 and base_priority > 1:
+        base_priority -= 1
+
+    # Category weight modifier
+    category_bump = {"academic": -1, "work": 0, "personal": 1}
+    bump = category_bump.get(category, 0)
+    base_priority = max(1, min(5, base_priority + bump))
+
+    return base_priority
+
 def document_to_task(doc: Dict) -> Dict:
     """Convert Appwrite document to TaskResponse format"""
     tags = []
@@ -213,17 +253,23 @@ def document_to_task(doc: Dict) -> Dict:
 
 @app.post("/tasks", response_model=TaskResponse)
 async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
-    """Create a new task for the user"""
+    """Create a new task — AI auto-assigns priority based on deadline, effort, and category"""
     now = datetime.now().isoformat()
-    
+
+    # AI: Override user-supplied priority with computed priority
+    ai_priority = calculate_priority(task.deadline, task.estimated_hours, task.category.value)
+
     document = {
         'title': task.title,
         'description': task.description,
         'user_id': user_id,
+        'userId': user_id,
         'category': task.category.value,
-        'priority': task.priority.value,
+        'priority': str(ai_priority),
         'deadline': task.deadline.isoformat(),
+        'dueDate': task.deadline.isoformat(),
         'estimated_hours': task.estimated_hours,
+        'actual_hours': 0.0,
         'energy_level': task.energy_level.value,
         'status': 'todo',
         'tags': json.dumps(task.tags),
@@ -232,7 +278,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
         'created_at': now,
         'updated_at': now,
     }
-    
+
     try:
         result = databases.create_document(
             database_id=DATABASE_ID,
@@ -240,26 +286,36 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
             document_id='unique()',
             data=document
         )
-        
-        # Create deadline notification
+
+        # Determine notification type based on urgency
+        hours_left = (task.deadline.replace(tzinfo=None) - datetime.now()).total_seconds() / 3600
+        notif_type = 'deadline' if hours_left <= 24 else 'reminder'
+        notif_title = f"⚠️ Due Soon: {task.title}" if hours_left <= 24 else f"📋 Task Created: {task.title}"
+        notif_msg = (f"URGENT: '{task.title}' is due in less than 24 hours!"
+                     if hours_left <= 24
+                     else f"Task '{task.title}' created. Due: {task.deadline.strftime('%Y-%m-%d %H:%M')}. AI Priority: {ai_priority}/5")
+
         notification_data = {
             'user_id': user_id,
-            'type': 'deadline',
-            'title': f"Task Due: {task.title}",
-            'message': f"Your task '{task.title}' is due on {task.deadline.strftime('%Y-%m-%d %H:%M')}",
+            'type': notif_type,
+            'title': notif_title,
+            'message': notif_msg,
             'task_id': result['$id'],
             'scheduled_for': task.deadline.isoformat(),
             'is_read': False,
             'channel': 'in_app',
             'created_at': now,
         }
-        databases.create_document(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            document_id='unique()',
-            data=notification_data
-        )
-        
+        try:
+            databases.create_document(
+                database_id=DATABASE_ID,
+                collection_id=NOTIFICATIONS_COLLECTION,
+                document_id='unique()',
+                data=notification_data
+            )
+        except Exception:
+            pass  # Don't fail task creation if notification fails
+
         return document_to_task(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create task: {str(e)}")
@@ -299,6 +355,53 @@ async def list_tasks(
         raise HTTPException(status_code=500, detail=f"Failed to list tasks: {str(e)}")
 
 
+@app.get("/tasks/prioritized", response_model=List[TaskResponse])
+async def get_prioritized_tasks(user_id: str = Depends(get_user_id)):
+    """
+    Returns all incomplete tasks sorted by AI-computed priority score.
+    Also recalculates and updates priority for any task where it may be stale.
+    """
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            queries=[
+                Query.equal('user_id', user_id),
+                Query.not_equal('status', 'completed'),
+                Query.limit(100)
+            ]
+        )
+
+        tasks = []
+        for doc in result.get('documents', []):
+            # Recalculate priority based on current time
+            try:
+                deadline = datetime.fromisoformat(doc['deadline'].replace('Z', ''))
+                fresh_priority = calculate_priority(
+                    deadline,
+                    doc.get('estimated_hours', 1),
+                    doc.get('category', 'personal')
+                )
+                # Update in DB if priority changed
+                if fresh_priority != doc.get('priority'):
+                    databases.update_document(
+                        database_id=DATABASE_ID,
+                        collection_id=TASKS_COLLECTION,
+                        document_id=doc['$id'],
+                        data={'priority': fresh_priority, 'updated_at': datetime.now().isoformat()}
+                    )
+                    doc['priority'] = fresh_priority
+            except Exception:
+                pass
+            tasks.append(document_to_task(doc))
+
+        # Sort by priority ascending (1=most urgent)
+        tasks.sort(key=lambda t: (t['priority'], t['deadline']))
+        return tasks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, user_id: str = Depends(get_user_id)):
     """Get task details"""
@@ -336,7 +439,8 @@ async def update_task(task_id: str, task_update: TaskUpdate, user_id: str = Depe
             if field == 'category':
                 update_data[field] = value.value if hasattr(value, 'value') else value
             elif field == 'priority':
-                update_data[field] = value.value if hasattr(value, 'value') else value
+                val = value.value if hasattr(value, 'value') else value
+                update_data[field] = str(val)
             elif field == 'energy_level':
                 update_data[field] = value.value if hasattr(value, 'value') else value
             elif field == 'status':
@@ -344,7 +448,10 @@ async def update_task(task_id: str, task_update: TaskUpdate, user_id: str = Depe
             elif field == 'tags':
                 update_data[field] = json.dumps(value)
             elif isinstance(value, datetime):
-                update_data[field] = value.isoformat()
+                iso_val = value.isoformat()
+                update_data[field] = iso_val
+                if field == 'deadline':
+                    update_data['dueDate'] = iso_val
             else:
                 update_data[field] = value
         
@@ -928,6 +1035,136 @@ async def get_unread_count(user_id: str = Depends(get_user_id)):
         )
         
         return {"count": result.get('total', 0)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user_id: str = Depends(get_user_id)):
+    """Mark a notification as read"""
+    try:
+        # Verify ownership
+        notification = databases.get_document(
+            database_id=DATABASE_ID,
+            collection_id=NOTIFICATIONS_COLLECTION,
+            document_id=notification_id
+        )
+        
+        if notification.get('user_id') != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=NOTIFICATIONS_COLLECTION,
+            document_id=notification_id,
+            data={'is_read': True}
+        )
+        
+        return {"message": "Notification marked as read"}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/notifications/read-all")
+async def mark_all_notifications_read(user_id: str = Depends(get_user_id)):
+    """Mark all notifications as read for the current user"""
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=NOTIFICATIONS_COLLECTION,
+            queries=[
+                Query.equal('user_id', user_id),
+                Query.equal('is_read', False),
+                Query.limit(100)
+            ]
+        )
+        count = 0
+        for doc in result.get('documents', []):
+            databases.update_document(
+                database_id=DATABASE_ID,
+                collection_id=NOTIFICATIONS_COLLECTION,
+                document_id=doc['$id'],
+                data={'is_read': True}
+            )
+            count += 1
+        return {"message": f"{count} notifications marked as read"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/notifications/generate-reminders")
+async def generate_reminders(user_id: str = Depends(get_user_id)):
+    """
+    AI Reminder Generator:
+    Scans incomplete tasks and creates reminder notifications
+    for tasks due within 24 hours that haven't been reminded yet.
+    """
+    now = datetime.now()
+    now_str = now.isoformat()
+    reminders_created = 0
+
+    try:
+        # Fetch all incomplete tasks for this user
+        tasks_result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            queries=[
+                Query.equal('user_id', user_id),
+                Query.not_equal('status', 'completed'),
+                Query.limit(100)
+            ]
+        )
+
+        for task in tasks_result.get('documents', []):
+            deadline_str = task.get('deadline', '')
+            if not deadline_str:
+                continue
+
+            try:
+                deadline = datetime.fromisoformat(deadline_str.replace('Z', ''))
+            except Exception:
+                continue
+
+            hours_left = (deadline - now).total_seconds() / 3600
+
+            # Only remind for tasks due in the next 24 hours
+            if 0 < hours_left <= 24:
+                # Check if a reminder already exists for this task today
+                existing = databases.list_documents(
+                    database_id=DATABASE_ID,
+                    collection_id=NOTIFICATIONS_COLLECTION,
+                    queries=[
+                        Query.equal('user_id', user_id),
+                        Query.equal('task_id', task['$id']),
+                        Query.equal('type', 'reminder'),
+                        Query.limit(1)
+                    ]
+                )
+                if existing.get('total', 0) > 0:
+                    continue  # Already reminded
+
+                notif_data = {
+                    'user_id': user_id,
+                    'type': 'reminder',
+                    'title': f"⏰ Reminder: {task.get('title', 'Task')} due soon",
+                    'message': f"'{task.get('title')}' is due in {int(hours_left)}h {int((hours_left % 1)*60)}m. Priority: {task.get('priority', 3)}/5",
+                    'task_id': task['$id'],
+                    'scheduled_for': deadline_str,
+                    'is_read': False,
+                    'channel': 'in_app',
+                    'created_at': now_str,
+                }
+                databases.create_document(
+                    database_id=DATABASE_ID,
+                    collection_id=NOTIFICATIONS_COLLECTION,
+                    document_id='unique()',
+                    data=notif_data
+                )
+                reminders_created += 1
+
+        return {"reminders_created": reminders_created, "message": f"Generated {reminders_created} new reminders"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

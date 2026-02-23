@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Task, TaskCategory, TaskPriority, TaskStatus } from "@/types/task";
 import apiClient from "@/lib/api";
+import EditTaskModal from "./EditTaskModal";
 
 interface TaskCardProps {
     task: Task;
@@ -55,6 +56,7 @@ const ENERGY_ICONS: Record<string, string> = {
 export default function TaskCard({ task, onUpdate, onDelete, compact = false }: TaskCardProps) {
     const [loading, setLoading] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
 
     const categoryStyle = CATEGORY_STYLES[task.category];
     const isOverdue = new Date(task.deadline) < new Date() && task.status !== "completed";
@@ -230,6 +232,13 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                         👁️
                     </button>
                     <button
+                        onClick={() => setEditOpen(true)}
+                        className="p-2 text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition"
+                        title="Edit Task"
+                    >
+                        ✏️
+                    </button>
+                    <button
                         onClick={handleDelete}
                         disabled={loading}
                         className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition disabled:opacity-50"
@@ -240,7 +249,6 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                 </div>
             </div>
 
-            {/* Expanded Details */}
             {showDetails && (
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -275,6 +283,14 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                     </div>
                 </div>
             )}
+
+            <EditTaskModal
+                task={task}
+                isOpen={editOpen}
+                onClose={() => setEditOpen(false)}
+                onUpdated={() => { setEditOpen(false); onUpdate(); }}
+                onDeleted={() => { setEditOpen(false); onDelete(); }}
+            />
         </div>
     );
 }

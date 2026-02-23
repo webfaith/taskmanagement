@@ -54,7 +54,7 @@ export default function DashboardLayout({
     return (
         <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
             {/* Sidebar */}
-            <aside className="w-64 bg-white dark:bg-gray-800 shadow-md flex-shrink-0 hidden md:block">
+            <aside className="w-64 bg-white dark:bg-gray-800 shadow-md flex-shrink-0 hidden md:block relative">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                     <h1 className="text-xl font-bold text-gray-800 dark:text-white">📋 TaskFlow</h1>
                 </div>
@@ -133,12 +133,18 @@ export default function DashboardLayout({
                     </button>
                 </nav>
 
-                {/* Quick Stats */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700">
-                    <div className="bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg p-4 text-white">
-                        <p className="text-sm opacity-80">Productivity</p>
-                        <p className="text-2xl font-bold">85%</p>
-                        <p className="text-xs opacity-80 mt-1">This week</p>
+                {/* User Info */}
+                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
+                                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                            </span>
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{user?.name || "User"}</p>
+                            <p className="text-xs text-gray-400 truncate">{user?.email || ""}</p>
+                        </div>
                     </div>
                 </div>
             </aside>

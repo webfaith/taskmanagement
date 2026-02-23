@@ -129,7 +129,7 @@ def setup_database():
                 database_id=DATABASE_ID,
                 collection_id=col_data['id'],
                 name=col_data['name'],
-                permissions=["role:member"]
+                permissions=["read(\"any\")", "write(\"users\")"]
             )
             print(f"Collection created: {collection['$id']}")
             current_col_id = collection['$id']
