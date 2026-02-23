@@ -15,7 +15,9 @@ from appwrite.client import Client
 from appwrite.services.databases import Databases
 from appwrite.query import Query
 
-load_dotenv()
+# Load environment variables from the same directory as this file
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(dotenv_path=env_path)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -172,6 +174,26 @@ class NotificationPreferences(BaseModel):
 
 # ==================== Helper Functions ====================
 
+def make_naive(dt: Any) -> datetime:
+    """Ensure a datetime is naive for safe subtraction"""
+    if dt is None:
+        return datetime.now()
+    if isinstance(dt, str):
+        try:
+            # Handle 'Z', +00:00, etc.
+            dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except Exception:
+            try:
+                # Fallback: strip any timezone string suffix or take first 19 chars
+                dt = datetime.fromisoformat(dt[:19])
+            except Exception:
+                return datetime.now()
+    
+    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
 def get_user_id(x_user_id: Optional[str] = Header(None)) -> str:
     """Extract user_id from header - in production, this would validate JWT tokens"""
     if not x_user_id:
@@ -188,9 +210,7 @@ def calculate_priority(deadline: datetime, estimated_hours: float, category: str
     - Task category weight
     """
     now = datetime.now()
-    # Strip timezone info if present for comparison
-    if deadline.tzinfo is not None:
-        deadline = deadline.replace(tzinfo=None)
+    deadline = make_naive(deadline)
     hours_until_deadline = (deadline - now).total_seconds() / 3600
 
     # Base priority from deadline urgency
@@ -288,7 +308,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
         )
 
         # Determine notification type based on urgency
-        hours_left = (task.deadline.replace(tzinfo=None) - datetime.now()).total_seconds() / 3600
+        hours_left = (make_naive(task.deadline) - datetime.now()).total_seconds() / 3600
         notif_type = 'deadline' if hours_left <= 24 else 'reminder'
         notif_title = f"⚠️ Due Soon: {task.title}" if hours_left <= 24 else f"📋 Task Created: {task.title}"
         notif_msg = (f"URGENT: '{task.title}' is due in less than 24 hours!"
@@ -840,8 +860,9 @@ def calculate_priority_score(task: Dict, now: datetime, target_date: datetime) -
     - User preference: 10%
     """
     # 1. Deadline Urgency (35%)
-    deadline = datetime.fromisoformat(task['deadline'])
-    hours_until_deadline = max(0, (deadline - now).total_seconds() / 3600)
+    deadline = make_naive(task.get('deadline'))
+    current_now = make_naive(now)
+    hours_until_deadline = max(0, (deadline - current_now).total_seconds() / 3600)
     
     # More urgent = higher score (normalized)
     urgency_score = 1.0
@@ -1122,12 +1143,9 @@ async def generate_reminders(user_id: str = Depends(get_user_id)):
             if not deadline_str:
                 continue
 
-            try:
-                deadline = datetime.fromisoformat(deadline_str.replace('Z', ''))
-            except Exception:
-                continue
-
-            hours_left = (deadline - now).total_seconds() / 3600
+            deadline = make_naive(deadline_str)
+            current_now = make_naive(now)
+            hours_left = (deadline - current_now).total_seconds() / 3600
 
             # Only remind for tasks due in the next 24 hours
             if 0 < hours_left <= 24:
@@ -1167,61 +1185,6 @@ async def generate_reminders(user_id: str = Depends(get_user_id)):
         return {"reminders_created": reminders_created, "message": f"Generated {reminders_created} new reminders"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.put("/notifications/{notification_id}/read")
-async def mark_notification_read(notification_id: str, user_id: str = Depends(get_user_id)):
-    """Mark a notification as read"""
-    try:
-        # Verify ownership
-        notification = databases.get_document(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            document_id=notification_id
-        )
-        
-        if notification.get('user_id') != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        databases.update_document(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            document_id=notification_id,
-            data={'is_read': True}
-        )
-        
-        return {"message": "Notification marked as read"}
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.put("/notifications/read-all")
-async def mark_all_notifications_read(user_id: str = Depends(get_user_id)):
-    """Mark all notifications as read for the current user"""
-    try:
-        result = databases.list_documents(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.equal('is_read', False)
-            ]
-        )
-        
-        for doc in result.get('documents', []):
-            databases.update_document(
-                database_id=DATABASE_ID,
-                collection_id=NOTIFICATIONS_COLLECTION,
-                document_id=doc['$id'],
-                data={'is_read': True}
-            )
-        
-        return {"message": f"Marked {result.get('total', 0)} notifications as read"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # Evaluation Collection ID
 EVALUATION_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_EVALUATION', 'evaluation_collection')
@@ -1819,94 +1782,22 @@ async def get_quick_stats(user_id: str = Depends(get_user_id)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== Health Check ====================
-
-@app.get("/notifications")
-async def get_notifications(
-    unread_only: bool = False,
-    limit: int = 50,
-    user_id: str = Depends(get_user_id)
-):
-    """List user notifications"""
-    try:
-        queries = [Query.equal('user_id', user_id), Query.limit(limit)]
-        if unread_only:
-            queries.append(Query.equal('is_read', False))
-        queries.append(Query.order_desc('created_at'))
-        
-        result = databases.list_documents(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            queries=queries
-        )
-        
-        notifications = []
-        for doc in result.get('documents', []):
-            notifications.append({
-                'id': doc['$id'],
-                'type': doc.get('type', ''),
-                'title': doc.get('title', ''),
-                'message': doc.get('message', ''),
-                'task_id': doc.get('task_id'),
-                'scheduled_for': doc.get('scheduled_for'),
-                'is_read': doc.get('is_read', False),
-                'channel': doc.get('channel', ''),
-                'created_at': doc.get('created_at')
-            })
-        
-        return {
-            "notifications": notifications,
-            "total": len(notifications),
-            "unread": sum(1 for n in notifications if not n['is_read'])
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.put("/notifications/{notification_id}/read")
-async def mark_notification_read(notification_id: str, user_id: str = Depends(get_user_id)):
-    """Mark a notification as read"""
-    try:
-        result = databases.get_document(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            document_id=notification_id
-        )
-        
-        if result.get('user_id') != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        databases.update_document(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            document_id=notification_id,
-            data={'is_read': True}
-        )
-        
-        return {"message": "Notification marked as read"}
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
-
+# ==================== Missing Endpoints & Preferences ====================
 
 @app.put("/notifications/preferences")
 async def set_notification_preferences(prefs: NotificationPreferences, user_id: str = Depends(get_user_id)):
     """Set notification preferences"""
     try:
         prefs_dict = prefs.model_dump()
-        
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         update_data = {
             'notification_prefs': json.dumps(prefs_dict),
             'updated_at': datetime.now().isoformat()
         }
-        
         if result.get('documents'):
             databases.update_document(
                 database_id=DATABASE_ID,
@@ -1923,53 +1814,7 @@ async def set_notification_preferences(prefs: NotificationPreferences, user_id: 
                 document_id='unique()',
                 data=update_data
             )
-        
         return {"message": "Notification preferences updated", "preferences": prefs_dict}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== Missing Endpoints ====================
-
-@app.get("/notifications/unread-count")
-async def get_unread_count(user_id: str = Depends(get_user_id)):
-    """Get count of unread notifications"""
-    try:
-        result = databases.list_documents(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.equal('is_read', False)
-            ]
-        )
-        return {"count": len(result.get('documents', []))}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.put("/notifications/read-all")
-async def mark_all_notifications_read(user_id: str = Depends(get_user_id)):
-    """Mark all notifications as read"""
-    try:
-        result = databases.list_documents(
-            database_id=DATABASE_ID,
-            collection_id=NOTIFICATIONS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.equal('is_read', False)
-            ]
-        )
-        
-        for doc in result.get('documents', []):
-            databases.update_document(
-                database_id=DATABASE_ID,
-                collection_id=NOTIFICATIONS_COLLECTION,
-                document_id=doc['$id'],
-                data={'is_read': True}
-            )
-        
-        return {"message": "All notifications marked as read"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1977,7 +1822,6 @@ async def mark_all_notifications_read(user_id: str = Depends(get_user_id)):
 @app.post("/schedule/optimize/{date}")
 async def optimize_schedule_date(date: str, user_id: str = Depends(get_user_id)):
     """Run priority-based scheduling for a specific date"""
-    # Reuse the existing optimize_schedule function
     return await optimize_schedule(date, user_id)
 
 
@@ -1990,7 +1834,6 @@ async def get_working_hours(user_id: str = Depends(get_user_id)):
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         if result.get('documents'):
             doc = result['documents'][0]
             return {
@@ -2003,10 +1846,7 @@ async def get_working_hours(user_id: str = Depends(get_user_id)):
 
 
 @app.put("/schedule/working-hours")
-async def update_working_hours(
-    hours: dict,
-    user_id: str = Depends(get_user_id)
-):
+async def update_working_hours(hours: dict, user_id: str = Depends(get_user_id)):
     """Update user's preferred working hours"""
     try:
         result = databases.list_documents(
@@ -2014,13 +1854,11 @@ async def update_working_hours(
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         update_data = {
             'preferred_start_time': hours.get('start', '08:00'),
             'preferred_end_time': hours.get('end', '22:00'),
             'updated_at': datetime.now().isoformat()
         }
-        
         if result.get('documents'):
             databases.update_document(
                 database_id=DATABASE_ID,
@@ -2037,18 +1875,13 @@ async def update_working_hours(
                 document_id='unique()',
                 data=update_data
             )
-        
         return {"message": "Working hours updated", **update_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/schedule/{date}/commitments")
-async def add_commitment_date(
-    date: str,
-    commitment: dict,
-    user_id: str = Depends(get_user_id)
-):
+async def add_commitment_date(date: str, commitment: dict, user_id: str = Depends(get_user_id)):
     """Add a single commitment for a date"""
     commitment_obj = Commitment(
         title=commitment['title'],
@@ -2060,37 +1893,24 @@ async def add_commitment_date(
 
 
 @app.delete("/schedule/{date}/commitments/{title}")
-async def remove_commitment(
-    date: str,
-    title: str,
-    user_id: str = Depends(get_user_id)
-):
+async def remove_commitment(date: str, title: str, user_id: str = Depends(get_user_id)):
     """Remove a commitment from a date"""
     try:
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=SCHEDULES_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.equal('date', date)
-            ]
+            queries=[Query.equal('user_id', user_id), Query.equal('date', date)]
         )
-        
         if result.get('documents'):
             schedule = result['documents'][0]
             commitments = json.loads(schedule.get('commitments', '[]'))
             commitments = [c for c in commitments if c.get('title') != title]
-            
             databases.update_document(
                 database_id=DATABASE_ID,
                 collection_id=SCHEDULES_COLLECTION,
                 document_id=schedule['$id'],
-                data={
-                    'commitments': json.dumps(commitments),
-                    'updated_at': datetime.now().isoformat()
-                }
+                data={'commitments': json.dumps(commitments), 'updated_at': datetime.now().isoformat()}
             )
-        
         return {"message": "Commitment removed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2102,27 +1922,20 @@ async def remove_commitment(
 async def get_analytics_stats(user_id: str = Depends(get_user_id)):
     """Get analytics statistics"""
     try:
-        # Get all tasks
         tasks_result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
         tasks = tasks_result.get('documents', [])
-        
         total = len(tasks)
         completed = len([t for t in tasks if t.get('status') == 'completed'])
         in_progress = len([t for t in tasks if t.get('status') == 'in_progress'])
         todo = len([t for t in tasks if t.get('status') == 'todo'])
-        
-        # Get today's tasks
         today = datetime.now().strftime('%Y-%m-%d')
         today_tasks = [t for t in tasks if t.get('deadline', '').startswith(today)]
         today_completed = len([t for t in today_tasks if t.get('status') == 'completed'])
-        
-        # Calculate completion rate
         completion_rate = (completed / total * 100) if total > 0 else 0
-        
         return {
             "total_tasks": total,
             "completed_tasks": completed,
@@ -2143,30 +1956,19 @@ async def get_weekly_analytics(user_id: str = Depends(get_user_id)):
     try:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=7)
-        
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.greater_than_equal('created_at', start_date.isoformat())
-            ]
+            queries=[Query.equal('user_id', user_id), Query.greater_than_equal('created_at', start_date.isoformat())]
         )
-        
         tasks = result.get('documents', [])
         weekly_data = []
-        
         for i in range(7):
             date = (end_date - timedelta(days=i)).strftime('%Y-%m-%d')
             day_tasks = [t for t in tasks if t.get('created_at', '').startswith(date)]
             completed = len([t for t in day_tasks if t.get('status') == 'completed'])
             created = len(day_tasks)
-            weekly_data.append({
-                "date": date,
-                "completed": completed,
-                "created": created
-            })
-        
+            weekly_data.append({"date": date, "completed": completed, "created": created})
         return weekly_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2181,19 +1983,12 @@ async def get_category_breakdown(user_id: str = Depends(get_user_id)):
             collection_id=TASKS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         tasks = result.get('documents', [])
         categories = []
-        
         for cat in ['academic', 'personal', 'work']:
             cat_tasks = [t for t in tasks if t.get('category') == cat]
             completed = len([t for t in cat_tasks if t.get('status') == 'completed'])
-            categories.append({
-                "category": cat,
-                "count": len(cat_tasks),
-                "completed": completed
-            })
-        
+            categories.append({"category": cat, "count": len(cat_tasks), "completed": completed})
         return categories
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2206,19 +2001,12 @@ async def get_streak(user_id: str = Depends(get_user_id)):
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.equal('status', 'completed')
-            ]
+            queries=[Query.equal('user_id', user_id), Query.equal('status', 'completed')]
         )
-        
         completed = result.get('documents', [])
-        
-        # Calculate current streak
         current_streak = 0
         longest_streak = 0
         current_date = datetime.now()
-        
         for i in range(30):
             check_date = (current_date - timedelta(days=i)).strftime('%Y-%m-%d')
             day_tasks = [t for t in completed if t.get('completed_at', '').startswith(check_date)]
@@ -2226,17 +2014,13 @@ async def get_streak(user_id: str = Depends(get_user_id)):
                 current_streak += 1
             elif i > 0:
                 break
-        
-        # Calculate longest streak (simplified)
         date_count = {}
         for task in completed:
             date = task.get('completed_at', '')[:10]
             if date:
                 date_count[date] = date_count.get(date, 0) + 1
-        
         if date_count:
             longest_streak = max(date_count.values())
-        
         return {"current": current_streak, "longest": longest_streak}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2253,7 +2037,6 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         if result.get('documents'):
             doc = result['documents'][0]
             notification_prefs = json.loads(doc.get('notification_prefs', '{}'))
@@ -2267,27 +2050,16 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
                     "reminder_minutes": notification_prefs.get('reminder_minutes', 30)
                 }
             }
-        
-        # Return defaults
         return {
-            "working_hours_start": "09:00",
-            "working_hours_end": "17:00",
-            "energy_pattern": "morning",
-            "notification_preferences": {
-                "email": True,
-                "push": True,
-                "reminder_minutes": 30
-            }
+            "working_hours_start": "09:00", "working_hours_end": "17:00", "energy_pattern": "morning",
+            "notification_preferences": {"email": True, "push": True, "reminder_minutes": 30}
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/users/preferences")
-async def update_user_preferences(
-    preferences: dict,
-    user_id: str = Depends(get_user_id)
-):
+async def update_user_preferences(preferences: dict, user_id: str = Depends(get_user_id)):
     """Update user's preferences"""
     try:
         result = databases.list_documents(
@@ -2295,7 +2067,6 @@ async def update_user_preferences(
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
         notification_prefs = preferences.get('notification_preferences', {})
         update_data = {
             'working_hours_start': preferences.get('working_hours_start', '09:00'),
@@ -2304,7 +2075,6 @@ async def update_user_preferences(
             'notification_prefs': json.dumps(notification_prefs),
             'updated_at': datetime.now().isoformat()
         }
-        
         if result.get('documents'):
             databases.update_document(
                 database_id=DATABASE_ID,
@@ -2321,12 +2091,9 @@ async def update_user_preferences(
                 document_id='unique()',
                 data=update_data
             )
-        
         return {
-            "message": "Preferences updated",
-            "working_hours_start": update_data['working_hours_start'],
-            "working_hours_end": update_data['working_hours_end'],
-            "energy_pattern": update_data['energy_pattern'],
+            "message": "Preferences updated", "working_hours_start": update_data['working_hours_start'],
+            "working_hours_end": update_data['working_hours_end'], "energy_pattern": update_data['energy_pattern'],
             "notification_preferences": notification_prefs
         }
     except Exception as e:
@@ -2338,20 +2105,16 @@ async def update_user_preferences(
 @app.get("/ai/tips")
 async def get_ai_tips(user_id: str = Depends(get_user_id)):
     """Get AI-generated productivity tips"""
-    try:
-        tips = [
-            {"tip": "Break large tasks into smaller, manageable sub-tasks", "category": "productivity"},
-            {"tip": "Schedule your most challenging work during your peak energy hours", "category": "energy"},
-            {"tip": "Take short breaks every 25-30 minutes to maintain focus", "category": "focus"},
-            {"tip": "Review your schedule the night before for better planning", "category": "planning"},
-            {"tip": "Prioritize tasks based on both urgency and importance", "category": "prioritization"},
-            {"tip": "Set realistic deadlines to avoid stress and burnout", "category": "stress"},
-            {"tip": "Use the Pomodoro technique for better time management", "category": "productivity"},
-            {"tip": "Allocate specific time blocks for different task categories", "category": "planning"}
-        ]
-        return tips
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return [
+        {"tip": "Break large tasks into smaller, manageable sub-tasks", "category": "productivity"},
+        {"tip": "Schedule your most challenging work during your peak energy hours", "category": "energy"},
+        {"tip": "Take short breaks every 25-30 minutes to maintain focus", "category": "focus"},
+        {"tip": "Review your schedule the night before for better planning", "category": "planning"},
+        {"tip": "Prioritize tasks based on both urgency and importance", "category": "prioritization"},
+        {"tip": "Set realistic deadlines to avoid stress and burnout", "category": "stress"},
+        {"tip": "Use the Pomodoro technique for better time management", "category": "productivity"},
+        {"tip": "Allocate specific time blocks for different task categories", "category": "planning"}
+    ]
 
 
 @app.post("/ai/task-suggestions")
@@ -2361,33 +2124,17 @@ async def get_task_suggestions(user_id: str = Depends(get_user_id)):
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
-            queries=[
-                Query.equal('user_id', user_id),
-                Query.not_equal('status', 'completed')
-            ]
+            queries=[Query.equal('user_id', user_id), Query.not_equal('status', 'completed')]
         )
-        
         tasks = result.get('documents', [])
         suggestions = []
-        
-        for task in tasks[:5]:  # Top 5 incomplete tasks
+        for task in tasks[:5]:
             priority = task.get('priority', 3)
             category = task.get('category', '')
-            
-            suggestion_text = ""
-            if category == 'academic':
-                suggestion_text = "Consider breaking this into smaller study sessions"
-            elif category == 'personal':
-                suggestion_text = "Schedule this during your leisure time"
-            else:
-                suggestion_text = "Allocate dedicated focus time for this task"
-            
-            suggestions.append({
-                "task_id": task['$id'],
-                "suggestion": suggestion_text,
-                "priority": 6 - priority  # Higher priority = higher number
-            })
-        
+            suggestion_text = "Consider breaking this into smaller study sessions" if category == 'academic' else \
+                             "Schedule this during your leisure time" if category == 'personal' else \
+                             "Allocate dedicated focus time for this task"
+            suggestions.append({"task_id": task['$id'], "suggestion": suggestion_text, "priority": 6 - priority})
         return suggestions
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2397,11 +2144,7 @@ async def get_task_suggestions(user_id: str = Depends(get_user_id)):
 
 @app.get("/")
 def root():
-    return {
-        "message": "Student Task Management API is Running",
-        "version": "1.0.0",
-        "status": "healthy"
-    }
+    return {"message": "Student Task Management API is Running", "version": "1.0.0", "status": "healthy"}
 
 
 @app.get("/health")
