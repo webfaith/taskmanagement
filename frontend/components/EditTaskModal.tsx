@@ -58,15 +58,15 @@ export default function EditTaskModal({ task, isOpen, onClose, onUpdated, onDele
     useEffect(() => {
         if (isOpen) {
             setFormData({
-                title: task.title,
+                title: task.title || "",
                 description: task.description || "",
-                category: task.category as TaskCategory,
-                deadline: toDatetimeLocal(task.deadline as unknown as string),
-                estimated_hours: task.estimated_hours,
-                energy_level: task.energy_level as EnergyLevel,
-                status: task.status as TaskStatus,
+                category: (task.category as TaskCategory) || "academic",
+                deadline: toDatetimeLocal(task.deadline),
+                estimated_hours: task.estimated_hours || 0,
+                energy_level: (task.energy_level as EnergyLevel) || "medium",
+                status: (task.status as TaskStatus) || "todo",
                 tags: Array.isArray(task.tags) ? task.tags.join(", ") : "",
-                is_recurring: task.is_recurring,
+                is_recurring: !!task.is_recurring,
                 recurring_rule: task.recurring_rule || "",
             });
             setError("");
@@ -232,7 +232,7 @@ export default function EditTaskModal({ task, isOpen, onClose, onUpdated, onDele
                                     key={level}
                                     type="button"
                                     className={`flex-1 py-2 rounded-lg border font-medium capitalize text-sm transition ${formData.energy_level === level
-                                            ? ENERGY_COLORS[level]
+                                            ? (ENERGY_COLORS[level] || "bg-gray-100 text-gray-600 border-gray-300")
                                             : "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600"
                                         }`}
                                     onClick={() => setFormData({ ...formData, energy_level: level })}

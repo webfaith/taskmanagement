@@ -51,12 +51,14 @@ export default function DashboardPage() {
     const handleTaskUpdate = () => fetchData();
     const handleTaskDelete = () => fetchData();
 
-    const getGreeting = () => {
+    const [greeting, setGreeting] = useState("Hello");
+
+    useEffect(() => {
         const hour = new Date().getHours();
-        if (hour < 12) return "Good morning";
-        if (hour < 17) return "Good afternoon";
-        return "Good evening";
-    };
+        if (hour < 12) setGreeting("Good morning");
+        else if (hour < 17) setGreeting("Good afternoon");
+        else setGreeting("Good evening");
+    }, []);
 
     const calculateWeeklyCompletion = () => {
         if (weeklyData.length === 0) return 0;
@@ -68,12 +70,16 @@ export default function DashboardPage() {
     const weeklyCompletion = calculateWeeklyCompletion();
     const productivityScore = stats?.completion_rate || weeklyCompletion || 0;
 
-    const todayDate = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    });
+    const [todayDate, setTodayDate] = useState("");
+
+    useEffect(() => {
+        setTodayDate(new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        }));
+    }, []);
 
     const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const getDayName = (dateStr: string) => {
@@ -94,7 +100,7 @@ export default function DashboardPage() {
                 <header className="mb-6 flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
-                            {getGreeting()}, {user?.name?.split(" ")[0] || "there"} 👋
+                            {greeting}, {user?.name?.split(" ")[0] || "there"} 👋
                         </h1>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{todayDate}</p>
                     </div>
@@ -183,7 +189,8 @@ export default function DashboardPage() {
                                                     key={task.id}
                                                     className="flex items-center gap-2.5 p-2.5 bg-gray-50 dark:bg-gray-700/40 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                                                 >
-                                                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${task.priority === 1 ? 'bg-red-400' :
+                                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${task.priority === 1 ? 'bg-red-400' :
+
                                                         task.priority === 2 ? 'bg-amber-400' :
                                                             task.priority === 3 ? 'bg-yellow-400' : 'bg-gray-300'
                                                         }`} />
@@ -198,7 +205,8 @@ export default function DashboardPage() {
                                                             {new Date(task.deadline).toLocaleDateString()}
                                                         </p>
                                                     </div>
-                                                    <span className={`text-xs px-1.5 py-0.5 rounded-md flex-shrink-0 ${task.category === 'academic' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded-md shrink-0 ${task.category === 'academic' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
+
                                                         task.category === 'personal' ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' :
                                                             'bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400'
                                                         }`}>
@@ -263,6 +271,7 @@ export default function DashboardPage() {
                                     </div>
                                     <div className="divide-y divide-gray-50 dark:divide-gray-700">
                                         {[
+                                            { href: "/dashboard/tasks", icon: "📋", label: "Tasks", desc: "Manage all your tasks" },
                                             { href: "/dashboard/calendar", icon: "📅", label: "Calendar", desc: "View tasks on calendar" },
                                             { href: "/dashboard/schedule", icon: "⚡", label: "Schedule", desc: "Optimize your day" },
                                             { href: "/dashboard/analytics", icon: "📊", label: "Analytics", desc: "Productivity insights" },

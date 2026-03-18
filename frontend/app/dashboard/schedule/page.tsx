@@ -14,12 +14,17 @@ export default function SchedulePage() {
     const [recommendations, setRecommendations] = useState<ScheduleRecommendation[]>([]);
     const [loading, setLoading] = useState(true);
     const [optimizing, setOptimizing] = useState(false);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+    const [selectedDate, setSelectedDate] = useState("");
     const [showAddCommitment, setShowAddCommitment] = useState(false);
     const [newCommitment, setNewCommitment] = useState({ title: "", start: "", end: "" });
 
     useEffect(() => {
-        if (user) {
+        const today = new Date().toISOString().split("T")[0];
+        setSelectedDate(today);
+    }, []);
+
+    useEffect(() => {
+        if (user && selectedDate) {
             fetchData();
         }
     }, [user, selectedDate]);
@@ -271,7 +276,7 @@ export default function SchedulePage() {
                                 <button
                                     onClick={handleOptimize}
                                     disabled={optimizing}
-                                    className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center gap-2"
+                                    className="px-5 py-2.5 bg-linear-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {optimizing ? (
                                         <>
@@ -390,7 +395,7 @@ export default function SchedulePage() {
                 {/* Quick Navigation */}
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Link
-                        href="/dashboard"
+                        href="/dashboard/tasks"
                         className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition"
                     >
                         <span className="text-2xl">📋</span>

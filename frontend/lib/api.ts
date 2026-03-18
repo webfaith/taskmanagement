@@ -46,7 +46,7 @@ class ApiClient {
 
     // Task operations
     async createTask(task: Partial<Task>): Promise<Task> {
-        return this.request<Task>('/tasks/', {
+        return this.request<Task>('/tasks', {
             method: 'POST',
             body: JSON.stringify(task),
         });
@@ -63,7 +63,7 @@ class ApiClient {
             if (filters.search) params.append('search', filters.search);
         }
         const queryString = params.toString();
-        return this.request<Task[]>(`/tasks/${queryString ? `?${queryString}` : ''}`);
+        return this.request<Task[]>(`/tasks${queryString ? `?${queryString}` : ''}`);
     }
 
     async getTask(id: string): Promise<Task> {
@@ -131,7 +131,7 @@ class ApiClient {
 
     // Notification operations
     async getNotifications(): Promise<Notification[]> {
-        return this.request<Notification[]>('/notifications/');
+        return this.request<Notification[]>('/notifications');
     }
 
     async markNotificationRead(id: string): Promise<void> {
@@ -194,6 +194,10 @@ class ApiClient {
 
     async getPrioritizedTasks(): Promise<any[]> {
         return this.request<any[]>('/tasks/prioritized');
+    }
+
+    async getAIInsights(): Promise<string[]> {
+        return this.request<string[]>('/evaluation/insights');
     }
 }
 

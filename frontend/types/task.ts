@@ -19,6 +19,7 @@ export interface Task {
     is_recurring: boolean;
     recurring_rule?: string;
     scheduled_time?: string;
+    priority_reason?: string;
 }
 
 export interface TaskFilters {

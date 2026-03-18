@@ -348,7 +348,7 @@ export default function AnalyticsPage() {
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
                             ✨ AI Insights
                         </h3>
-                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-6">
+                        <div className="bg-linear-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-6">
                             <ul className="space-y-3">
                                 {insights.map((insight, index) => (
                                     <li key={index} className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
@@ -438,19 +438,19 @@ export default function AnalyticsPage() {
 
                 {/* Streak and Achievements */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-6 text-white">
+                    <div className="bg-linear-to-br from-orange-500 to-red-500 rounded-xl p-6 text-white">
                         <h3 className="text-lg font-semibold">🔥 Current Streak</h3>
                         <p className="text-5xl font-bold mt-4">{stats?.streak_days || 0} days</p>
                         <p className="text-sm opacity-80 mt-2">Keep it up!</p>
                     </div>
-                    <div className="bg-gradient-to-br from-blue-500 to-purple-500 rounded-xl p-6 text-white">
+                    <div className="bg-linear-to-br from-blue-500 to-purple-500 rounded-xl p-6 text-white">
                         <h3 className="text-lg font-semibold">📈 Tasks This Week</h3>
                         <p className="text-5xl font-bold mt-4">
                             {stats?.weekly_data?.reduce((sum, d) => sum + d.completed, 0) || 0}
                         </p>
                         <p className="text-sm opacity-80 mt-2">Completed tasks</p>
                     </div>
-                    <div className="bg-gradient-to-br from-green-500 to-teal-500 rounded-xl p-6 text-white">
+                    <div className="bg-linear-to-br from-green-500 to-teal-500 rounded-xl p-6 text-white">
                         <h3 className="text-lg font-semibold">✅ Completion Rate</h3>
                         <p className="text-5xl font-bold mt-4">{stats?.completion_rate || 0}%</p>
                         <p className="text-sm opacity-80 mt-2">Overall performance</p>
@@ -460,7 +460,7 @@ export default function AnalyticsPage() {
                 {/* Quick Navigation */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <Link
-                        href="/dashboard"
+                        href="/dashboard/tasks"
                         className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition"
                     >
                         <span className="text-2xl">📋</span>

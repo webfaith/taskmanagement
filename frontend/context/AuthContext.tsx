@@ -32,8 +32,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const currentUser = await account.get();
             setUser(currentUser);
             setUserId(currentUser.$id);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('user_id', currentUser.$id);
+            }
             // Initialize API client with user info
             apiClient.setUserId(currentUser.$id);
+            
+            // Try to get a JWT for secure backend communication
+            try {
+                const session = await account.createJWT();
+                apiClient.setToken(session.jwt);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('auth_token', session.jwt);
+                }
+            } catch (jwtError) {
+                console.warn("Could not generate JWT:", jwtError);
+            }
         } catch (error) {
             setUser(null);
             setUserId(null);
@@ -54,8 +68,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const currentUser = await account.get();
             setUser(currentUser);
             setUserId(currentUser.$id);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('user_id', currentUser.$id);
+            }
             // Initialize API client with user info
             apiClient.setUserId(currentUser.$id);
+            
+            // Generate JWT
+            const session = await account.createJWT();
+            apiClient.setToken(session.jwt);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('auth_token', session.jwt);
+            }
+            
             router.push("/dashboard");
         } catch (error) {
             console.error(error);
@@ -78,6 +103,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await account.deleteSession("current");
             setUser(null);
             setUserId(null);
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('user_id');
+                localStorage.removeItem('auth_token');
+            }
             router.push("/login");
         } catch (error) {
             console.error(error);

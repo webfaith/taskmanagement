@@ -36,6 +36,7 @@ export default function DashboardLayout({
 
     const navItems = [
         { name: "Dashboard", href: "/dashboard", icon: "📊" },
+        { name: "Tasks", href: "/dashboard/tasks", icon: "📋" },
         { name: "Calendar", href: "/dashboard/calendar", icon: "📅" },
         { name: "Schedule", href: "/dashboard/schedule", icon: "⚡" },
         { name: "Analytics", href: "/dashboard/analytics", icon: "📈" },
@@ -54,7 +55,7 @@ export default function DashboardLayout({
     return (
         <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
             {/* Sidebar */}
-            <aside className="w-64 bg-white dark:bg-gray-800 shadow-md flex-shrink-0 hidden md:block relative">
+            <aside className="w-64 bg-white dark:bg-gray-800 shadow-md shrink-0 hidden md:block relative">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                     <h1 className="text-xl font-bold text-gray-800 dark:text-white">📋 TaskFlow</h1>
                 </div>
@@ -136,7 +137,7 @@ export default function DashboardLayout({
                 {/* User Info */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center shrink-0">
                             <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
                                 {user?.name?.charAt(0)?.toUpperCase() || "U"}
                             </span>

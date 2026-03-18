@@ -5,7 +5,8 @@ Comprehensive API for task management, scheduling, and notifications
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
+
 from datetime import datetime, timedelta
 from enum import Enum
 import json
@@ -41,7 +42,56 @@ client.set_endpoint(os.getenv('APPWRITE_ENDPOINT', 'https://fra.cloud.appwrite.i
 client.set_project(os.getenv('APPWRITE_PROJECT_ID', ''))
 client.set_key(os.getenv('APPWRITE_API_KEY', ''))
 
-databases = Databases(client)
+from appwrite.services.tables_db import TablesDB
+
+class DatabasesWrapper:
+    """
+    Adapter to map old Databases service calls to the new TablesDB service
+    """
+    def __init__(self, service):
+        self.service = service
+        self.mapping = {
+            'create_document': 'create_row',
+            'list_documents': 'list_rows',
+            'get_document': 'get_row',
+            'update_document': 'update_row',
+            'delete_document': 'delete_row',
+            'list_collections': 'list_tables',
+            'create_collection': 'create_table',
+            'delete_collection': 'delete_table',
+            'get_collection': 'get_table',
+        }
+        
+    def __getattr__(self, name):
+        # Map old names to new ones if they exist in our mapping
+        mapped_name = self.mapping.get(name, name)
+        attr = getattr(self.service, mapped_name, None)
+        
+        if attr is None:
+            # Fallback if attribute not found in TablesDB but exists in another service
+            # This shouldn't normally happen if we're only using TablesDB
+            raise AttributeError(f"'TablesDB' object has no attribute '{mapped_name}'")
+
+        if callable(attr):
+            def wrapper(*args, **kwargs):
+                # Map old argument names to new ones if passed as kwargs
+                if 'collection_id' in kwargs:
+                    kwargs['table_id'] = kwargs.pop('collection_id')
+                if 'document_id' in kwargs:
+                    kwargs['row_id'] = kwargs.pop('document_id')
+                
+                result = attr(*args, **kwargs)
+                # If the result is a model object from modern Appwrite SDK, convert it to dict
+                if hasattr(result, 'to_dict'):
+                    return result.to_dict()
+                return result
+            return wrapper
+        return attr
+
+# Initialize with TablesDB
+tables_db_raw = TablesDB(client)
+databases = DatabasesWrapper(tables_db_raw)
+
 DATABASE_ID = os.getenv('APPWRITE_DATABASE_ID', 'scheduler_db')
 
 # Collection IDs
@@ -119,7 +169,7 @@ class TaskResponse(BaseModel):
     description: Optional[str]
     category: str
     priority: int
-    deadline: datetime
+    deadline: Optional[datetime] = None
     estimated_hours: float
     actual_hours: Optional[float]
     energy_level: str
@@ -130,8 +180,9 @@ class TaskResponse(BaseModel):
     tags: List[str]
     is_recurring: bool
     recurring_rule: Optional[str]
-    created_at: datetime
-    updated_at: datetime
+    priority_reason: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 class TaskFilter(BaseModel):
     status: Optional[TaskStatus] = None
@@ -201,42 +252,57 @@ def get_user_id(x_user_id: Optional[str] = Header(None)) -> str:
     return x_user_id
 
 
-def calculate_priority(deadline: datetime, estimated_hours: float, category: str) -> int:
+def calculate_priority(deadline: datetime, estimated_hours: float, category: str) -> Tuple[int, str]:
     """
     AI Rule-Based Priority Assignment
-    Returns 1 (Critical) to 5 (Very Low) based on:
-    - Deadline urgency (hours until deadline)
-    - Estimated effort (hours)
-    - Task category weight
+    Returns (priority, reason) where priority is 1 (Critical) to 5 (Very Low)
     """
     now = datetime.now()
     deadline = make_naive(deadline)
     hours_until_deadline = (deadline - now).total_seconds() / 3600
 
+    reasons = []
+
     # Base priority from deadline urgency
     if hours_until_deadline <= 0:
-        base_priority = 1          # Overdue → Critical
+        base_priority = 1
+        reasons.append("Task is overdue")
     elif hours_until_deadline <= 24:
-        base_priority = 1          # Due within 24h → Critical
+        base_priority = 1
+        reasons.append("Due in less than 24 hours")
     elif hours_until_deadline <= 72:
-        base_priority = 2          # Due within 3 days → High
+        base_priority = 2
+        reasons.append("Due within 3 days")
     elif hours_until_deadline <= 168:
-        base_priority = 3          # Due within 7 days → Medium
+        base_priority = 3
+        reasons.append("Due within a week")
     elif hours_until_deadline <= 336:
-        base_priority = 4          # Due within 14 days → Low
+        base_priority = 4
+        reasons.append("Due within 14 days")
     else:
-        base_priority = 5          # Due beyond 14 days → Very Low
+        base_priority = 5
+        reasons.append("Long-term deadline")
 
     # Effort modifier: heavy tasks get bumped up by 1 level
     if estimated_hours > 5 and base_priority > 1:
         base_priority -= 1
+        reasons.append(f"High effort ({estimated_hours}h) requires early start")
 
     # Category weight modifier
-    category_bump = {"academic": -1, "work": 0, "personal": 1}
-    bump = category_bump.get(category, 0)
-    base_priority = max(1, min(5, base_priority + bump))
+    if category == "academic":
+        base_priority = max(1, base_priority - 1)
+        reasons.append("Academic tasks prioritized for school success")
+    elif category == "work":
+        # work stays same
+        pass
+    else:
+        base_priority = min(5, base_priority + 1)
+        reasons.append("Personal/Low-impact category")
 
-    return base_priority
+    final_priority = max(1, min(5, base_priority))
+    reason_str = ". ".join(reasons) + "."
+    
+    return final_priority, reason_str
 
 def document_to_task(doc: Dict) -> Dict:
     """Convert Appwrite document to TaskResponse format"""
@@ -247,13 +313,23 @@ def document_to_task(doc: Dict) -> Dict:
         except:
             tags = []
     
+    # Re-calculate priority reason live
+    deadline_val = doc.get('deadline') or doc.get('dueDate')
+    priority_reason = "Manual override"
+    if deadline_val:
+        try:
+            dl_dt = datetime.fromisoformat(deadline_val.replace('Z', '+00:00'))
+            _, priority_reason = calculate_priority(dl_dt, doc.get('estimated_hours', 1), doc.get('category', 'personal'))
+        except:
+            pass
+
     return {
-        'id': doc['$id'],
+        'id': doc.get('$id', ''),
         'title': doc.get('title', ''),
         'description': doc.get('description'),
         'category': doc.get('category', ''),
-        'priority': doc.get('priority', 3),
-        'deadline': doc.get('deadline'),
+        'priority': int(doc.get('priority', 3)),
+        'deadline': deadline_val,
         'estimated_hours': doc.get('estimated_hours', 0),
         'actual_hours': doc.get('actual_hours'),
         'energy_level': doc.get('energy_level', 'medium'),
@@ -264,8 +340,9 @@ def document_to_task(doc: Dict) -> Dict:
         'tags': tags,
         'is_recurring': doc.get('is_recurring', False),
         'recurring_rule': doc.get('recurring_rule'),
-        'created_at': doc.get('created_at'),
-        'updated_at': doc.get('updated_at'),
+        'priority_reason': priority_reason,
+        'created_at': doc.get('created_at') or doc.get('$createdAt'),
+        'updated_at': doc.get('updated_at') or doc.get('$updatedAt'),
     }
 
 
@@ -277,7 +354,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
     now = datetime.now().isoformat()
 
     # AI: Override user-supplied priority with computed priority
-    ai_priority = calculate_priority(task.deadline, task.estimated_hours, task.category.value)
+    ai_priority, _ = calculate_priority(task.deadline, task.estimated_hours, task.category.value)
 
     document = {
         'title': task.title,
@@ -285,7 +362,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
         'user_id': user_id,
         'userId': user_id,
         'category': task.category.value,
-        'priority': str(ai_priority),
+        'priority': int(ai_priority),
         'deadline': task.deadline.isoformat(),
         'dueDate': task.deadline.isoformat(),
         'estimated_hours': task.estimated_hours,
@@ -397,7 +474,7 @@ async def get_prioritized_tasks(user_id: str = Depends(get_user_id)):
             # Recalculate priority based on current time
             try:
                 deadline = datetime.fromisoformat(doc['deadline'].replace('Z', ''))
-                fresh_priority = calculate_priority(
+                fresh_priority, _ = calculate_priority(
                     deadline,
                     doc.get('estimated_hours', 1),
                     doc.get('category', 'personal')
@@ -474,6 +551,15 @@ async def update_task(task_id: str, task_update: TaskUpdate, user_id: str = Depe
                     update_data['dueDate'] = iso_val
             else:
                 update_data[field] = value
+        
+        # AI: Recalculate priority if key fields changed
+        if 'deadline' in update_data or 'category' in update_data or 'estimated_hours' in update_data:
+            dl_str = existing.get('deadline') or existing.get('dueDate')
+            dl_dt = task_update.deadline or datetime.fromisoformat(dl_str.replace('Z', ''))
+            cat = task_update.category.value if task_update.category else existing.get('category', 'personal')
+            est = task_update.estimated_hours if task_update.estimated_hours is not None else existing.get('estimated_hours', 1)
+            ai_priority, _ = calculate_priority(dl_dt, est, cat)
+            update_data['priority'] = int(ai_priority)
         
         # Handle completion
         if task_update.status == TaskStatus.completed:
@@ -772,9 +858,7 @@ async def optimize_schedule(date: str, user_id: str = Depends(get_user_id)):
             collection_id=TASKS_COLLECTION,
             queries=[
                 Query.equal('user_id', user_id),
-                Query.not_equal('status', 'completed'),
-                Query.greater_than_equal('deadline', f"{date}T00:00:00"),
-                Query.less_than_equal('deadline', f"{date}T23:59:59")
+                Query.not_equal('status', 'completed')
             ]
         )
         tasks = [document_to_task(doc) for doc in tasks_result.get('documents', [])]
@@ -992,7 +1076,7 @@ async def get_recommendations(date: str, user_id: str = Depends(get_user_id)):
         scored_tasks.sort(key=lambda x: (x['priority_score'], -x['days_until_deadline']), reverse=True)
         
         # Get schedule for the day
-        schedule_result = databases.list_document(
+        schedule_result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=SCHEDULES_COLLECTION,
             document_id='unique()'  # This won't work, need different approach
@@ -1697,6 +1781,10 @@ async def get_ai_insights(user_id: str = Depends(get_user_id)):
                 insights.append("You're maintaining high productivity levels!")
             elif avg_score < 50:
                 insights.append("Consider reviewing your schedule to find improvement areas")
+        elif not docs:
+            insights.append("Complete your first tasks to see productivity insights")
+        else:
+            insights.append("Keep logging your tasks to unlock personalized AI insights")
         
         # Get task completion data
         tasks_result = databases.list_documents(
@@ -1709,12 +1797,19 @@ async def get_ai_insights(user_id: str = Depends(get_user_id)):
         )
         
         completed = tasks_result.get('documents', [])
+        days_completed = {}
         if completed:
             # Analyze best day (simplified)
-            days_completed = {}
+            insights.append(f"You've completed {len(completed)} tasks so far. Great start!")
             for task in completed:
                 date = task.get('completed_at', '')[:10]
                 days_completed[date] = days_completed.get(date, 0) + 1
+        else:
+            insights.append("Add and complete tasks to see your progress here")
+        
+        # Add a general tip if list is thin
+        if len(insights) < 2:
+            insights.append("Tip: Use the 'Optimize' button in the schedule view to let AI plan your day")
             
             if days_completed:
                 best_day = max(days_completed, key=days_completed.get)

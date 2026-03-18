@@ -3,7 +3,9 @@ Database initialization script for Student Task Management System
 Creates all required Appwrite collections with proper schema and indexes
 """
 from appwrite.client import Client
-from appwrite.services.databases import Databases
+from appwrite.services.tables_db import TablesDB
+from appwrite.enums.index_type import IndexType
+from appwrite.enums.order_by import OrderBy
 from appwrite.id import ID
 import os
 from dotenv import load_dotenv
@@ -16,16 +18,16 @@ client.set_endpoint(os.getenv('APPWRITE_ENDPOINT'))
 client.set_project(os.getenv('APPWRITE_PROJECT_ID'))
 client.set_key(os.getenv('APPWRITE_API_KEY'))
 
-databases = Databases(client)
+tables_db = TablesDB(client)
 
 DATABASE_ID = "scheduler_db"
 
 def setup_database():
-    print("Setting up Appwrite Database for Student Task Management System...")
+    print("Setting up Appwrite Database for Student Task Management System using TablesDB API...")
     
     # Create Database
     try:
-        db = databases.create(
+        db = tables_db.create(
             database_id=DATABASE_ID,
             name="Student Task Management DB"
         )
@@ -80,9 +82,9 @@ def setup_database():
                 {'type': 'string', 'key': 'user_id', 'size': 64, 'required': True},
                 {'type': 'string', 'key': 'date', 'size': 20, 'required': True},  # YYYY-MM-DD
                 {'type': 'integer', 'key': 'day_of_week', 'required': True},  # 0-6
-                {'type': 'string', 'key': 'free_slots', 'size': 5000, 'required': False},  # JSON array
-                {'type': 'string', 'key': 'commitments', 'size': 5000, 'required': False},  # JSON array
-                {'type': 'string', 'key': 'study_slots', 'size': 5000, 'required': False},  # JSON array
+                {'type': 'string', 'key': 'free_slots', 'size': 4000, 'required': False},  # Reduced size to fit limits
+                {'type': 'string', 'key': 'commitments', 'size': 4000, 'required': False},  # Reduced size
+                {'type': 'string', 'key': 'study_slots', 'size': 4000, 'required': False},  # Reduced size
                 {'type': 'string', 'key': 'sleep_schedule', 'size': 500, 'required': False},  # JSON object
                 {'type': 'datetime', 'key': 'created_at', 'required': True},
                 {'type': 'datetime', 'key': 'updated_at', 'required': True},
@@ -113,7 +115,7 @@ def setup_database():
                 {'type': 'integer', 'key': 'tasks_completed', 'required': True},
                 {'type': 'float', 'key': 'total_hours_worked', 'required': True},
                 {'type': 'float', 'key': 'productivity_score', 'required': False},
-                {'type': 'string', 'key': 'category_breakdown', 'size': 5000, 'required': False},  # JSON object
+                {'type': 'string', 'key': 'category_breakdown', 'size': 4000, 'required': False},  # Reduced size
                 {'type': 'string', 'key': 'peak_hours', 'size': 2000, 'required': False},  # JSON array
                 {'type': 'string', 'key': 'goals_met', 'size': 2000, 'required': False},  # JSON array
                 {'type': 'datetime', 'key': 'created_at', 'required': True},
@@ -121,58 +123,58 @@ def setup_database():
         }
     ]
     
-    # Create collections and attributes
+    # Create collections (tables) and attributes (columns)
     for col_data in collections:
         try:
-            print(f"Creating collection: {col_data['name']}...")
-            collection = databases.create_collection(
+            print(f"Creating table: {col_data['name']}...")
+            table = tables_db.create_table(
                 database_id=DATABASE_ID,
-                collection_id=col_data['id'],
+                table_id=col_data['id'],
                 name=col_data['name'],
                 permissions=["read(\"any\")", "write(\"users\")"]
             )
-            print(f"Collection created: {collection['$id']}")
-            current_col_id = collection['$id']
+            print(f"Table created: {table['$id']}")
+            current_table_id = table['$id']
         except Exception as e:
-            print(f"Collection '{col_data['name']}' might already exist: {e}")
-            current_col_id = col_data['id']
+            print(f"Table '{col_data['name']}' might already exist: {e}")
+            current_table_id = col_data['id']
         
-        # Create attributes for this collection
+        # Create attributes for this table
         for attr in col_data['attributes']:
             try:
                 if attr['type'] == 'string':
-                    databases.create_string_attribute(
-                        DATABASE_ID, current_col_id, 
+                    tables_db.create_string_column(
+                        DATABASE_ID, current_table_id, 
                         attr['key'], attr['size'], attr['required']
                     )
                 elif attr['type'] == 'datetime':
-                    databases.create_datetime_attribute(
-                        DATABASE_ID, current_col_id, 
+                    tables_db.create_datetime_column(
+                        DATABASE_ID, current_table_id, 
                         attr['key'], attr['required']
                     )
                 elif attr['type'] == 'integer':
-                    databases.create_integer_attribute(
-                        DATABASE_ID, current_col_id, 
+                    tables_db.create_integer_column(
+                        DATABASE_ID, current_table_id, 
                         attr['key'], attr['required']
                     )
                 elif attr['type'] == 'float':
-                    databases.create_float_attribute(
-                        DATABASE_ID, current_col_id, 
+                    tables_db.create_float_column(
+                        DATABASE_ID, current_table_id, 
                         attr['key'], attr['required']
                     )
                 elif attr['type'] == 'boolean':
-                    databases.create_boolean_attribute(
-                        DATABASE_ID, current_col_id, 
+                    tables_db.create_boolean_column(
+                        DATABASE_ID, current_table_id, 
                         attr['key'], attr['required']
                     )
-                print(f"  Attribute '{attr['key']}' created.")
+                print(f"  Column '{attr['key']}' created.")
             except Exception as e:
-                print(f"  Error creating attribute '{attr['key']}': {e}")
+                print(f"  Error creating column '{attr['key']}': {e}")
     
     # Create indexes for efficient queries
     create_indexes()
     
-    print("\n=== COLLECTION IDS (add to .env) ===")
+    print("\n=== TABLE IDS (add to .env) ===")
     for col in collections:
         print(f"{col['name'].upper()}_COLLECTION_ID={col['id']}")
 
@@ -182,36 +184,41 @@ def create_indexes():
     
     indexes_data = [
         # Tasks indexes
-        {'collection': 'tasks_collection', 'keys': [('user_id', 'ASC')]},
-        {'collection': 'tasks_collection', 'keys': [('user_id', 'ASC'), ('status', 'ASC')]},
-        {'collection': 'tasks_collection', 'keys': [('user_id', 'ASC'), ('deadline', 'ASC')]},
-        {'collection': 'tasks_collection', 'keys': [('user_id', 'ASC'), ('priority', 'ASC')]},
-        {'collection': 'tasks_collection', 'keys': [('user_id', 'ASC'), ('category', 'ASC')]},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user', 'columns': ['user_id'], 'type': IndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_status', 'columns': ['user_id', 'status'], 'type': IndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_deadline', 'columns': ['user_id', 'deadline'], 'type': IndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_priority', 'columns': ['user_id', 'priority'], 'type': IndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_category', 'columns': ['user_id', 'category'], 'type': IndexType.KEY},
         
         # Schedules indexes
-        {'collection': 'schedules_collection', 'keys': [('user_id', 'ASC'), ('date', 'ASC')]},
+        {'table': 'schedules_collection', 'key': 'idx_schedules_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
         
         # Notifications indexes
-        {'collection': 'notifications_collection', 'keys': [('user_id', 'ASC'), ('is_read', 'ASC')]},
-        {'collection': 'notifications_collection', 'keys': [('user_id', 'ASC'), ('created_at', 'DESC')]},
+        {'table': 'notifications_collection', 'key': 'idx_notifications_user_read', 'columns': ['user_id', 'is_read'], 'type': IndexType.KEY},
+        {'table': 'notifications_collection', 'key': 'idx_notifications_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
         
         # Analytics indexes
-        {'collection': 'analytics_collection', 'keys': [('user_id', 'ASC'), ('date', 'ASC')]},
+        {'table': 'analytics_collection', 'key': 'idx_analytics_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
     ]
     
     for idx in indexes_data:
         try:
-            idx_id = f"idx_{idx['collection']}_{'_'.join([k[0] for k in idx['keys']])}"
-            databases.create_index(
+            orders = [OrderBy.ASC] * len(idx['columns'])
+            # Notifications created_at is usually DESC
+            if 'created_at' in idx['columns']:
+                orders = [OrderBy.ASC if c != 'created_at' else OrderBy.DESC for c in idx['columns']]
+                
+            tables_db.create_index(
                 database_id=DATABASE_ID,
-                collection_id=idx['collection'],
-                index_id=idx_id,
-                keys=idx['keys'],
-                orders=['ASC'] * len(idx['keys'])
+                table_id=idx['table'],
+                key=idx['key'],
+                type=idx['type'],
+                columns=idx['columns'],
+                orders=orders
             )
-            print(f"  Index '{idx_id}' created for {idx['collection']}")
+            print(f"  Index '{idx['key']}' created for {idx['table']}")
         except Exception as e:
-            print(f"  Error creating index for {idx['collection']}: {e}")
+            print(f"  Error creating index for {idx['table']} ({idx['key']}): {e}")
 
 if __name__ == "__main__":
     setup_database()

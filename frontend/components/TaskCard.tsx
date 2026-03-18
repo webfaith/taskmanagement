@@ -58,17 +58,23 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
     const [showDetails, setShowDetails] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
 
-    const categoryStyle = CATEGORY_STYLES[task.category];
-    const isOverdue = new Date(task.deadline) < new Date() && task.status !== "completed";
-    const deadlineDate = new Date(task.deadline);
-    const formattedDeadline = deadlineDate.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    });
+    const categoryStyle = CATEGORY_STYLES[task.category] || CATEGORY_STYLES.academic;
+    const priorityColor = PRIORITY_COLORS[task.priority] || "bg-gray-400 text-white";
+    const statusStyle = STATUS_STYLES[task.status] || STATUS_STYLES.todo;
+
+    const isOverdue = task.deadline ? (new Date(task.deadline) < new Date() && task.status !== "completed") : false;
+    const deadlineDate = task.deadline ? new Date(task.deadline) : null;
+    const formattedDeadline = deadlineDate && !isNaN(deadlineDate.getTime()) 
+        ? deadlineDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+        })
+        : "No deadline";
 
     const getTimeUntilDeadline = () => {
+        if (!deadlineDate || isNaN(deadlineDate.getTime())) return "N/A";
         const now = new Date();
         const diff = deadlineDate.getTime() - now.getTime();
         if (diff <= 0) return "Overdue";
@@ -135,8 +141,8 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                             <span>{ENERGY_ICONS[task.energy_level]} {task.estimated_hours}h</span>
                         </div>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
-                        P{task.priority}
+                    <span className={`text-xs px-2 py-1 rounded-full ${priorityColor}`}>
+                        P{task.priority || "?"}
                     </span>
                 </div>
             </div>
@@ -181,13 +187,13 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                         </span>
 
                         {/* Priority Badge */}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[task.priority]}`}>
-                            Priority {task.priority}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${priorityColor}`}>
+                            Priority {task.priority || "N/A"}
                         </span>
 
                         {/* Energy Level */}
                         <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                            {ENERGY_ICONS[task.energy_level]} {task.energy_level}
+                            {ENERGY_ICONS[task.energy_level] || "✨"} {task.energy_level || "N/A"}
                         </span>
 
                         {/* Estimated Hours */}
@@ -255,13 +261,13 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                         <div>
                             <span className="text-gray-500 dark:text-gray-400">Created:</span>
                             <span className="ml-2 text-gray-700 dark:text-gray-300">
-                                {new Date(task.created_at).toLocaleDateString()}
+                                {task.created_at ? new Date(task.created_at).toLocaleDateString() : "N/A"}
                             </span>
                         </div>
                         <div>
                             <span className="text-gray-500 dark:text-gray-400">Status:</span>
-                            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${STATUS_STYLES[task.status].bg} ${STATUS_STYLES[task.status].text}`}>
-                                {task.status.replace("_", " ")}
+                            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${statusStyle.bg} ${statusStyle.text}`}>
+                                {task.status?.replace("_", " ") || "N/A"}
                             </span>
                         </div>
                         {task.scheduled_time && (
@@ -278,6 +284,17 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                                 <span className="ml-2 text-gray-700 dark:text-gray-300 capitalize">
                                     {task.recurring_rule}
                                 </span>
+                            </div>
+                        )}
+                        {task.priority_reason && (
+                            <div className="col-span-2 mt-2 p-3 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm">🤖</span>
+                                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">AI Priority Logic</span>
+                                </div>
+                                <p className="text-sm text-indigo-900 dark:text-indigo-200 italic font-medium">
+                                    "{task.priority_reason}"
+                                </p>
                             </div>
                         )}
                     </div>

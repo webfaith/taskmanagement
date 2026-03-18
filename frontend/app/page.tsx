@@ -47,14 +47,14 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-linear-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🎓</span>
-              <span className="text-xl font-bold text-white">StudentScheduler</span>
+              <span className="text-xl font-bold text-white">TaskFlow</span>
             </div>
             <div className="flex items-center gap-4">
               <Link href="/login" className="text-white hover:text-blue-300 transition">
@@ -84,7 +84,7 @@ export default function Home() {
             {/* Headline */}
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Master Your
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"> Student Life</span>
+              <span className="bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"> Student Life</span>
             </h1>
 
             {/* Subheadline */}
@@ -96,7 +96,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
               <Link
                 href="/register"
-                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                className="px-8 py-4 bg-linear-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
               >
                 Start Free Trial
               </Link>
@@ -127,8 +127,8 @@ export default function Home() {
 
           {/* Dashboard Preview */}
           <div className="mt-20 relative">
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent z-10"></div>
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 shadow-2xl border border-slate-700">
+            <div className="absolute inset-0 bg-linear-to-t from-slate-900 via-transparent to-transparent z-10"></div>
+            <div className="bg-linear-to-br from-slate-800 to-slate-900 rounded-2xl p-4 shadow-2xl border border-slate-700">
               <div className="bg-slate-900 rounded-xl p-6">
                 {/* Mock Dashboard */}
                 <div className="grid grid-cols-4 gap-4 mb-4">
@@ -151,7 +151,7 @@ export default function Home() {
                 </div>
                 <div className="bg-slate-800 rounded-xl p-4">
                   <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" style={{ width: '85%' }}></div>
+                    <div className="h-full bg-linear-to-r from-blue-500 to-purple-500 rounded-full" style={{ width: '85%' }}></div>
                   </div>
                 </div>
               </div>
@@ -166,7 +166,7 @@ export default function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {benefits.map((benefit, index) => (
               <div key={index} className="text-center">
-                <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
+                <div className="text-4xl md:text-5xl font-bold bg-linear-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-2">
                   {benefit.number}
                 </div>
                 <div className="text-slate-400">{benefit.label}</div>
@@ -228,7 +228,7 @@ export default function Home() {
               { step: "3", title: "Get Scheduled", description: "AI optimizes your schedule automatically" }
             ].map((item, index) => (
               <div key={index} className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">
+                <div className="w-16 h-16 bg-linear-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">
                   {item.step}
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-2">{item.title}</h3>
@@ -282,12 +282,12 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 px-4">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-3xl p-12">
+          <div className="bg-linear-to-r from-blue-600 to-purple-600 rounded-3xl p-12">
             <h2 className="text-4xl font-bold text-white mb-4">
               Ready to Boost Your Productivity?
             </h2>
             <p className="text-blue-100 mb-8 max-w-xl mx-auto">
-              Join thousands of students who are already achieving more with StudentScheduler.
+              Join thousands of students who are already achieving more with TaskFlow.
             </p>
             <Link
               href="/register"
@@ -305,10 +305,10 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🎓</span>
-              <span className="text-xl font-bold text-white">StudentScheduler</span>
+              <span className="text-xl font-bold text-white">TaskFlow</span>
             </div>
             <div className="text-slate-400 text-sm">
-              © 2024 StudentScheduler. All rights reserved.
+              © 2026 TaskFlow. All rights reserved.
             </div>
             <div className="flex gap-6">
               <a href="#" className="text-slate-400 hover:text-white transition">Privacy</a>
