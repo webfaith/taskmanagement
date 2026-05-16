@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: taskmanagement-backend
+    env: python
+    plan: free
+    rootDir: ai_service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: APPWRITE_ENDPOINT
+        sync: false
+      - key: APPWRITE_PROJECT_ID
+        sync: false
+      - key: APPWRITE_API_KEY
+        sync: false
+      - key: APPWRITE_DATABASE_ID
+        sync: false
+      - key: APPWRITE_COLLECTION_ID_USERS
+        sync: false
+      - key: APPWRITE_COLLECTION_ID_TASKS
+        sync: false
+      - key: APPWRITE_COLLECTION_ID_SCHEDULES
+        sync: false
+      - key: APPWRITE_COLLECTION_ID_NOTIFICATIONS
+        sync: false
+      - key: APPWRITE_COLLECTION_ID_ANALYTICS
+        sync: false
+
+  - type: web
+    name: taskmanagement-frontend
+    env: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

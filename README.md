@@ -320,11 +320,41 @@ cd frontend
 vercel deploy
 ```
 
-### Railway Deployment
+If you deploy from the Vercel dashboard, make sure the project is pointed at `frontend/`:
 
-1. Connect your GitHub repository
-2. Set environment variables
-3. Deploy both services
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Output Directory: leave blank for Next.js
+
+The repo root is not the Next.js app, so deploying `./` will make Vercel look for a static `public` output and fail with the error you saw.
+
+### Render Deployment
+
+This repository is set up as a monorepo, so deploy the backend and frontend as separate Render web services.
+
+You can either:
+
+1. Import the repo as a Render Blueprint using [render.yaml](/C:/Users/user/Downloads/taskmanagement/render.yaml)
+2. Or create the two services manually in the Render dashboard
+
+Backend service:
+
+- Root Directory: `ai_service`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+Frontend service:
+
+- Root Directory: `frontend`
+- Build Command: `npm install && npm run build`
+- Start Command: `npm run start`
+
+Environment variables:
+
+- Backend: `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, `APPWRITE_DATABASE_ID`, and the collection IDs used by the app
+- Frontend: `NEXT_PUBLIC_API_URL` set to the public URL of the backend service
+
+If you deploy the frontend before the backend, set `NEXT_PUBLIC_API_URL` later and redeploy the frontend after the backend URL is available.
 
 ## Contributing
 
