@@ -4,7 +4,7 @@ Creates all required Appwrite collections with proper schema and indexes
 """
 from appwrite.client import Client
 from appwrite.services.tables_db import TablesDB
-from appwrite.enums.index_type import IndexType
+from appwrite.enums.tables_db_index_type import TablesDBIndexType
 from appwrite.enums.order_by import OrderBy
 from appwrite.id import ID
 import os
@@ -227,35 +227,35 @@ def create_indexes():
     
     indexes_data = [
         # Tasks indexes
-        {'table': 'tasks_collection', 'key': 'idx_tasks_user', 'columns': ['user_id'], 'type': IndexType.KEY},
-        {'table': 'tasks_collection', 'key': 'idx_tasks_user_status', 'columns': ['user_id', 'status'], 'type': IndexType.KEY},
-        {'table': 'tasks_collection', 'key': 'idx_tasks_user_deadline', 'columns': ['user_id', 'deadline'], 'type': IndexType.KEY},
-        {'table': 'tasks_collection', 'key': 'idx_tasks_user_priority', 'columns': ['user_id', 'priority'], 'type': IndexType.KEY},
-        {'table': 'tasks_collection', 'key': 'idx_tasks_user_category', 'columns': ['user_id', 'category'], 'type': IndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user', 'columns': ['user_id'], 'type': TablesDBIndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_status', 'columns': ['user_id', 'status'], 'type': TablesDBIndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_deadline', 'columns': ['user_id', 'deadline'], 'type': TablesDBIndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_priority', 'columns': ['user_id', 'priority'], 'type': TablesDBIndexType.KEY},
+        {'table': 'tasks_collection', 'key': 'idx_tasks_user_category', 'columns': ['user_id', 'category'], 'type': TablesDBIndexType.KEY},
         
         # Schedules indexes
-        {'table': 'schedules_collection', 'key': 'idx_schedules_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
+        {'table': 'schedules_collection', 'key': 'idx_schedules_user_date', 'columns': ['user_id', 'date'], 'type': TablesDBIndexType.KEY},
         
         # Notifications indexes
-        {'table': 'notifications_collection', 'key': 'idx_notifications_user_read', 'columns': ['user_id', 'is_read'], 'type': IndexType.KEY},
-        {'table': 'notifications_collection', 'key': 'idx_notifications_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
+        {'table': 'notifications_collection', 'key': 'idx_notifications_user_read', 'columns': ['user_id', 'is_read'], 'type': TablesDBIndexType.KEY},
+        {'table': 'notifications_collection', 'key': 'idx_notifications_user_created', 'columns': ['user_id', 'created_at'], 'type': TablesDBIndexType.KEY},
         
         # Analytics indexes
-        {'table': 'analytics_collection', 'key': 'idx_analytics_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
+        {'table': 'analytics_collection', 'key': 'idx_analytics_user_date', 'columns': ['user_id', 'date'], 'type': TablesDBIndexType.KEY},
         
         # Evaluation indexes
-        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
-        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_metric', 'columns': ['user_id', 'metric_type'], 'type': IndexType.KEY},
+        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_date', 'columns': ['user_id', 'date'], 'type': TablesDBIndexType.KEY},
+        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_metric', 'columns': ['user_id', 'metric_type'], 'type': TablesDBIndexType.KEY},
         
         # Feedback indexes
-        {'table': 'feedback_collection', 'key': 'idx_feedback_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
-        {'table': 'feedback_collection', 'key': 'idx_feedback_user_category', 'columns': ['user_id', 'category'], 'type': IndexType.KEY},
+        {'table': 'feedback_collection', 'key': 'idx_feedback_user_created', 'columns': ['user_id', 'created_at'], 'type': TablesDBIndexType.KEY},
+        {'table': 'feedback_collection', 'key': 'idx_feedback_user_category', 'columns': ['user_id', 'category'], 'type': TablesDBIndexType.KEY},
         
         # Survey indexes
-        {'table': 'survey_collection', 'key': 'idx_survey_user_completed', 'columns': ['user_id', 'completed_at'], 'type': IndexType.KEY},
+        {'table': 'survey_collection', 'key': 'idx_survey_user_completed', 'columns': ['user_id', 'completed_at'], 'type': TablesDBIndexType.KEY},
         
         # Stories indexes
-        {'table': 'stories_collection', 'key': 'idx_stories_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
+        {'table': 'stories_collection', 'key': 'idx_stories_user_created', 'columns': ['user_id', 'created_at'], 'type': TablesDBIndexType.KEY},
     ]
     
     for idx in indexes_data:
