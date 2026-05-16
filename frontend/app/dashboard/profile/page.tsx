@@ -14,11 +14,15 @@ export default function ProfilePage() {
     const [preferences, setPreferences] = useState<UserPreferences | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [googleConnected, setGoogleConnected] = useState(false);
+    const [googleSyncing, setGoogleSyncing] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"preferences" | "notifications" | "account">("preferences");
 
     useEffect(() => {
         if (user) {
             fetchPreferences();
+            fetchGoogleStatus();
         }
     }, [user]);
 
@@ -67,6 +71,50 @@ export default function ProfilePage() {
 
     const handleLogout = async () => {
         await logout();
+    };
+
+    const fetchGoogleStatus = async () => {
+        try {
+            setGoogleLoading(true);
+            const status = await apiClient.getGoogleCalendarStatus();
+            setGoogleConnected(status.connected);
+        } catch (err) {
+            console.error("Failed to fetch Google Calendar status:", err);
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
+
+    const handleConnectGoogleCalendar = async () => {
+        try {
+            const redirectUri = `${window.location.origin}/google/callback`;
+            const { auth_url } = await apiClient.getGoogleCalendarAuthUrl(redirectUri);
+            window.location.href = auth_url;
+        } catch (err) {
+            console.error("Failed to start Google Calendar connect flow:", err);
+        }
+    };
+
+    const handleSyncGoogleCalendar = async () => {
+        try {
+            setGoogleSyncing(true);
+            const today = new Date().toISOString().split("T")[0];
+            await apiClient.syncGoogleCalendar(today);
+            await fetchGoogleStatus();
+        } catch (err) {
+            console.error("Failed to sync Google Calendar:", err);
+        } finally {
+            setGoogleSyncing(false);
+        }
+    };
+
+    const handleDisconnectGoogleCalendar = async () => {
+        try {
+            await apiClient.disconnectGoogleCalendar();
+            setGoogleConnected(false);
+        } catch (err) {
+            console.error("Failed to disconnect Google Calendar:", err);
+        }
     };
 
     if (loading) {
@@ -395,6 +443,52 @@ export default function ProfilePage() {
                                         {user?.$createdAt ? new Date(user.$createdAt).toLocaleDateString() : "N/A"}
                                     </span>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Google Calendar */}
+                        <div className="mb-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h4 className="font-medium text-gray-900 dark:text-white">Google Calendar</h4>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        Connect to sync scheduled tasks into your calendar.
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <span
+                                        className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
+                                            googleConnected
+                                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                                                : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                                        }`}
+                                    >
+                                        {googleLoading ? "Checking..." : googleConnected ? "Connected" : "Not connected"}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-3">
+                                <button
+                                    onClick={handleConnectGoogleCalendar}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+                                >
+                                    Connect Calendar
+                                </button>
+                                <button
+                                    onClick={handleSyncGoogleCalendar}
+                                    disabled={!googleConnected || googleSyncing}
+                                    className="px-4 py-2 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition disabled:opacity-50"
+                                >
+                                    {googleSyncing ? "Syncing..." : "Sync Schedule"}
+                                </button>
+                                <button
+                                    onClick={handleDisconnectGoogleCalendar}
+                                    disabled={!googleConnected}
+                                    className="px-4 py-2 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition disabled:opacity-50"
+                                >
+                                    Disconnect
+                                </button>
                             </div>
                         </div>
 

@@ -101,6 +101,11 @@ APPWRITE_COLLECTION_ID_TASKS=tasks_collection
 APPWRITE_COLLECTION_ID_SCHEDULES=schedules_collection
 APPWRITE_COLLECTION_ID_NOTIFICATIONS=notifications_collection
 APPWRITE_COLLECTION_ID_ANALYTICS=analytics_collection
+
+# Google Calendar integration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/google/callback
 ```
 
 ### Frontend Environment Variables
@@ -351,7 +356,7 @@ Frontend service:
 
 Environment variables:
 
-- Backend: `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, `APPWRITE_DATABASE_ID`, and the collection IDs used by the app
+- Backend: `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, `APPWRITE_DATABASE_ID`, the collection IDs used by the app, and `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` if you want calendar sync
 - Frontend: `NEXT_PUBLIC_API_URL` set to the public URL of the backend service
 
 If you deploy the frontend before the backend, set `NEXT_PUBLIC_API_URL` later and redeploy the frontend after the backend URL is available.

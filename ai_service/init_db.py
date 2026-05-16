@@ -45,6 +45,7 @@ def setup_database():
                 {'type': 'string', 'key': 'email', 'size': 255, 'required': True},
                 {'type': 'string', 'key': 'display_name', 'size': 255, 'required': False},
                 {'type': 'string', 'key': 'timezone', 'size': 50, 'required': False},
+                {'type': 'string', 'key': 'google_calendar_token', 'size': 10000, 'required': False},
                 {'type': 'string', 'key': 'notification_prefs', 'size': 5000, 'required': False},
                 {'type': 'string', 'key': 'schedule_preferences', 'size': 5000, 'required': False},
                 {'type': 'datetime', 'key': 'created_at', 'required': True},

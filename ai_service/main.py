@@ -9,6 +9,8 @@ from typing import Optional, List, Dict, Any, Tuple
 
 from datetime import datetime, timedelta
 from enum import Enum
+from urllib import parse, request as urlrequest
+from urllib.error import HTTPError, URLError
 import json
 import os
 from dotenv import load_dotenv
@@ -101,6 +103,11 @@ TASKS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_TASKS', 'tasks_collection')
 SCHEDULES_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_SCHEDULES', 'schedules_collection')
 NOTIFICATIONS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_NOTIFICATIONS', 'notifications_collection')
 ANALYTICS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_ANALYTICS', 'analytics_collection')
+
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', '')
+GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 
 
 # ==================== Pydantic Models ====================
@@ -224,6 +231,15 @@ class NotificationPreferences(BaseModel):
     progress_reminders: bool = True
 
 
+class GoogleCalendarCallback(BaseModel):
+    code: str
+    redirect_uri: Optional[str] = None
+
+
+class GoogleCalendarSyncRequest(BaseModel):
+    date: Optional[str] = None
+
+
 # ==================== Helper Functions ====================
 
 def make_naive(dt: Any) -> datetime:
@@ -251,6 +267,136 @@ def get_user_id(x_user_id: Optional[str] = Header(None)) -> str:
     if not x_user_id:
         raise HTTPException(status_code=401, detail="User ID required in header")
     return x_user_id
+
+
+def _parse_json_field(value: Any, default: Any):
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return default
+    return default
+
+
+def _safe_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                return datetime.fromisoformat(value[:19])
+            except Exception:
+                return None
+    return None
+
+
+def _google_auth_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="Google Calendar is not configured")
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri or GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "access_type": "offline",
+        "prompt": "consent",
+        "scope": GOOGLE_OAUTH_SCOPE,
+    }
+    if state:
+        params["state"] = state
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{parse.urlencode(params)}"
+
+
+def _google_token_request(data: Dict[str, str]) -> Dict[str, Any]:
+    body = parse.urlencode(data).encode("utf-8")
+    req = urlrequest.Request(
+        "https://oauth2.googleapis.com/token",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as err:
+        detail = err.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=400, detail=f"Google token exchange failed: {detail}")
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Google token exchange unavailable: {err.reason}")
+
+
+def _google_api_request(url: str, method: str = "GET", token: Optional[str] = None, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
+    req = urlrequest.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urlrequest.urlopen(req, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except HTTPError as err:
+        detail = err.read().decode("utf-8", errors="ignore")
+        raise HTTPException(status_code=400, detail=f"Google API request failed: {detail}")
+    except URLError as err:
+        raise HTTPException(status_code=502, detail=f"Google API request unavailable: {err.reason}")
+
+
+def _refresh_google_token_if_needed(user_doc: Dict[str, Any]) -> Optional[str]:
+    token_data = _parse_json_field(user_doc.get("google_calendar_token"), {})
+    access_token = token_data.get("access_token")
+    refresh_token = token_data.get("refresh_token")
+    expires_at = _safe_datetime(token_data.get("expires_at"))
+
+    if not access_token:
+        return None
+
+    if expires_at and expires_at > datetime.now() + timedelta(minutes=2):
+        return access_token
+
+    if not refresh_token or not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return access_token
+
+    refreshed = _google_token_request({
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    })
+    new_access = refreshed.get("access_token")
+    if not new_access:
+        return access_token
+
+    token_data["access_token"] = new_access
+    token_data["expires_in"] = refreshed.get("expires_in")
+    token_data["expires_at"] = (datetime.now() + timedelta(seconds=int(refreshed.get("expires_in", 3600)))).isoformat()
+    if refreshed.get("refresh_token"):
+        token_data["refresh_token"] = refreshed["refresh_token"]
+
+    try:
+        databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            document_id=user_doc["$id"],
+            data={
+                "google_calendar_token": json.dumps(token_data),
+                "updated_at": datetime.now().isoformat()
+            }
+        )
+    except Exception:
+        pass
+
+    return new_access
 
 
 def calculate_priority(deadline: datetime, estimated_hours: float, category: str) -> Tuple[int, str]:
@@ -2203,6 +2349,211 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
             "theme": update_data.get('theme', 'system'),
             "notification_preferences": notification_prefs
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Google Calendar Integration ====================
+
+@app.get("/google/calendar/auth-url")
+async def get_google_calendar_auth_url(redirect_uri: Optional[str] = None, user_id: str = Depends(get_user_id)):
+    """Generate the Google OAuth consent URL for calendar access."""
+    try:
+        return {
+            "auth_url": _google_auth_url(redirect_uri=redirect_uri, state=user_id),
+            "redirect_uri": redirect_uri or GOOGLE_REDIRECT_URI,
+            "scopes": [GOOGLE_OAUTH_SCOPE],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/google/calendar/callback")
+async def connect_google_calendar(payload: GoogleCalendarCallback, user_id: str = Depends(get_user_id)):
+    """Exchange an OAuth code for Google Calendar tokens and store them on the user profile."""
+    try:
+        redirect_uri = payload.redirect_uri or GOOGLE_REDIRECT_URI
+        if not redirect_uri:
+            raise HTTPException(status_code=400, detail="Google redirect URI is required")
+
+        token_response = _google_token_request({
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "code": payload.code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        })
+
+        access_token = token_response.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Google did not return an access token")
+
+        expires_in = int(token_response.get("expires_in", 3600))
+        token_data = {
+            "access_token": access_token,
+            "refresh_token": token_response.get("refresh_token"),
+            "scope": token_response.get("scope", GOOGLE_OAUTH_SCOPE),
+            "token_type": token_response.get("token_type", "Bearer"),
+            "expires_in": expires_in,
+            "expires_at": (datetime.now() + timedelta(seconds=expires_in)).isoformat(),
+            "connected_at": datetime.now().isoformat(),
+            "redirect_uri": redirect_uri,
+        }
+
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.equal('user_id', user_id)]
+        )
+        if not result.get('documents'):
+            raise HTTPException(status_code=404, detail="User profile not found. Save preferences first so the profile exists.")
+
+        user_doc = result['documents'][0]
+        databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            document_id=user_doc['$id'],
+            data={
+                'google_calendar_token': json.dumps(token_data),
+                'timezone': user_doc.get('timezone', 'UTC'),
+                'updated_at': datetime.now().isoformat()
+            }
+        )
+        return {"message": "Google Calendar connected", "connected": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/google/calendar/status")
+async def google_calendar_status(user_id: str = Depends(get_user_id)):
+    """Return whether the current user has connected Google Calendar."""
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.equal('user_id', user_id)]
+        )
+        if not result.get('documents'):
+            return {"connected": False}
+
+        doc = result['documents'][0]
+        token_data = _parse_json_field(doc.get('google_calendar_token'), {})
+        return {
+            "connected": bool(token_data.get('access_token')),
+            "scope": token_data.get('scope'),
+            "expires_at": token_data.get('expires_at'),
+            "connected_at": token_data.get('connected_at'),
+            "timezone": doc.get('timezone', 'UTC'),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/google/calendar/disconnect")
+async def disconnect_google_calendar(user_id: str = Depends(get_user_id)):
+    """Remove Google Calendar tokens from the user's profile."""
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.equal('user_id', user_id)]
+        )
+        if not result.get('documents'):
+            raise HTTPException(status_code=404, detail="User profile not found")
+
+        doc = result['documents'][0]
+        databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            document_id=doc['$id'],
+            data={
+                'google_calendar_token': json.dumps({}),
+                'updated_at': datetime.now().isoformat()
+            }
+        )
+        return {"message": "Google Calendar disconnected", "connected": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/google/calendar/sync")
+async def sync_google_calendar(payload: GoogleCalendarSyncRequest, user_id: str = Depends(get_user_id)):
+    """Sync scheduled tasks to Google Calendar for a given day."""
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.equal('user_id', user_id)]
+        )
+        if not result.get('documents'):
+            raise HTTPException(status_code=404, detail="User profile not found")
+
+        user_doc = result['documents'][0]
+        access_token = _refresh_google_token_if_needed(user_doc)
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Google Calendar is not connected")
+
+        date = payload.date or datetime.now().strftime("%Y-%m-%d")
+        tasks_result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            queries=[
+                Query.equal('user_id', user_id),
+                Query.greater_than_equal('scheduled_start', f"{date}T00:00:00"),
+                Query.less_than_equal('scheduled_start', f"{date}T23:59:59")
+            ]
+        )
+        tasks = tasks_result.get('documents', [])
+        created_events = []
+        skipped = 0
+
+        for task in tasks:
+            scheduled_start = _safe_datetime(task.get('scheduled_start'))
+            scheduled_end = _safe_datetime(task.get('scheduled_end'))
+            if not scheduled_start or not scheduled_end:
+                skipped += 1
+                continue
+
+            event_payload = {
+                "summary": task.get('title', 'Task'),
+                "description": task.get('description') or '',
+                "start": {
+                    "dateTime": scheduled_start.isoformat(),
+                    "timeZone": user_doc.get('timezone', 'UTC'),
+                },
+                "end": {
+                    "dateTime": scheduled_end.isoformat(),
+                    "timeZone": user_doc.get('timezone', 'UTC'),
+                },
+            }
+            created_event = _google_api_request(
+                "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                method="POST",
+                token=access_token,
+                payload=event_payload,
+            )
+            created_events.append({
+                "task_id": task.get('$id'),
+                "event_id": created_event.get('id'),
+                "html_link": created_event.get('htmlLink'),
+                "summary": created_event.get('summary'),
+            })
+
+        return {
+            "message": "Google Calendar sync completed",
+            "date": date,
+            "synced": len(created_events),
+            "skipped": skipped,
+            "events": created_events,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

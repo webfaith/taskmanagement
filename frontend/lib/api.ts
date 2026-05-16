@@ -179,6 +179,36 @@ class ApiClient {
         });
     }
 
+    // Google Calendar integration
+    async getGoogleCalendarAuthUrl(redirectUri: string): Promise<{ auth_url: string; redirect_uri: string; scopes: string[] }> {
+        const params = new URLSearchParams({ redirect_uri: redirectUri });
+        return this.request<{ auth_url: string; redirect_uri: string; scopes: string[] }>(`/google/calendar/auth-url?${params.toString()}`);
+    }
+
+    async connectGoogleCalendar(code: string, redirectUri: string): Promise<{ message: string; connected: boolean }> {
+        return this.request<{ message: string; connected: boolean }>('/google/calendar/callback', {
+            method: 'POST',
+            body: JSON.stringify({ code, redirect_uri: redirectUri }),
+        });
+    }
+
+    async getGoogleCalendarStatus(): Promise<{ connected: boolean; scope?: string; expires_at?: string; connected_at?: string; timezone?: string }> {
+        return this.request<{ connected: boolean; scope?: string; expires_at?: string; connected_at?: string; timezone?: string }>('/google/calendar/status');
+    }
+
+    async disconnectGoogleCalendar(): Promise<{ message: string; connected: boolean }> {
+        return this.request<{ message: string; connected: boolean }>('/google/calendar/disconnect', {
+            method: 'DELETE',
+        });
+    }
+
+    async syncGoogleCalendar(date?: string): Promise<{ message: string; date: string; synced: number; skipped: number; events: { task_id?: string; event_id?: string; html_link?: string; summary?: string }[] }> {
+        return this.request<{ message: string; date: string; synced: number; skipped: number; events: { task_id?: string; event_id?: string; html_link?: string; summary?: string }[] }>('/google/calendar/sync', {
+            method: 'POST',
+            body: JSON.stringify({ date }),
+        });
+    }
+
     // AI Suggestions
     async getProductivityTips(): Promise<{ tip: string; category: string }[]> {
         return this.request<{ tip: string; category: string }[]>('/ai/tips');
