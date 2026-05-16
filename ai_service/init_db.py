@@ -123,6 +123,33 @@ def setup_database():
             ]
         },
         {
+            'name': 'groups',
+            'id': 'groups_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'name', 'size': 255, 'required': True},
+                {'type': 'string', 'key': 'description', 'size': 5000, 'required': False},
+                {'type': 'string', 'key': 'owner_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'member_ids', 'size': 10000, 'required': False},
+                {'type': 'string', 'key': 'settings', 'size': 5000, 'required': False},
+                {'type': 'boolean', 'key': 'is_active', 'required': True},
+                {'type': 'datetime', 'key': 'created_at', 'required': True},
+                {'type': 'datetime', 'key': 'updated_at', 'required': True},
+            ]
+        },
+        {
+            'name': 'group_tasks',
+            'id': 'group_tasks_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'group_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'task_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'assigned_to', 'size': 10000, 'required': False},
+                {'type': 'string', 'key': 'milestone', 'size': 5000, 'required': False},
+                {'type': 'float', 'key': 'progress', 'required': True},
+                {'type': 'datetime', 'key': 'created_at', 'required': True},
+                {'type': 'datetime', 'key': 'updated_at', 'required': True},
+            ]
+        },
+        {
             'name': 'evaluation',
             'id': 'evaluation_collection',
             'attributes': [
@@ -243,6 +270,10 @@ def create_indexes():
         
         # Analytics indexes
         {'table': 'analytics_collection', 'key': 'idx_analytics_user_date', 'columns': ['user_id', 'date'], 'type': TablesDBIndexType.KEY},
+        {'table': 'groups_collection', 'key': 'idx_groups_owner', 'columns': ['owner_id'], 'type': TablesDBIndexType.KEY},
+        {'table': 'groups_collection', 'key': 'idx_groups_active', 'columns': ['owner_id', 'is_active'], 'type': TablesDBIndexType.KEY},
+        {'table': 'group_tasks_collection', 'key': 'idx_group_tasks_group', 'columns': ['group_id'], 'type': TablesDBIndexType.KEY},
+        {'table': 'group_tasks_collection', 'key': 'idx_group_tasks_task', 'columns': ['task_id'], 'type': TablesDBIndexType.KEY},
         
         # Evaluation indexes
         {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_date', 'columns': ['user_id', 'date'], 'type': TablesDBIndexType.KEY},

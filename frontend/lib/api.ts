@@ -1,4 +1,4 @@
-import { Task, TaskFilters, UserSchedule, Notification, ScheduleRecommendation, ProductivityStats, UserPreferences } from '@/types/task';
+import { Task, TaskFilters, UserSchedule, Notification, ScheduleRecommendation, ProductivityStats, UserPreferences, Group, GroupTask } from '@/types/task';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -228,6 +228,59 @@ class ApiClient {
 
     async getAIInsights(): Promise<string[]> {
         return this.request<string[]>('/evaluation/insights');
+    }
+
+    // Group collaboration
+    async getGroups(): Promise<Group[]> {
+        return this.request<Group[]>('/groups');
+    }
+
+    async createGroup(data: { name: string; description?: string; member_ids?: string[]; settings?: Record<string, unknown> }): Promise<Group> {
+        return this.request<Group>('/groups', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async getGroup(groupId: string): Promise<{ group: Group; tasks: GroupTask[] }> {
+        return this.request<{ group: Group; tasks: GroupTask[] }>(`/groups/${groupId}`);
+    }
+
+    async updateGroup(groupId: string, data: Partial<{ name: string; description: string; member_ids: string[]; settings: Record<string, unknown>; is_active: boolean }>): Promise<Group> {
+        return this.request<Group>(`/groups/${groupId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deleteGroup(groupId: string): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/groups/${groupId}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async addGroupMember(groupId: string, userId: string): Promise<Group> {
+        return this.request<Group>(`/groups/${groupId}/members`, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: userId }),
+        });
+    }
+
+    async removeGroupMember(groupId: string, memberId: string): Promise<Group> {
+        return this.request<Group>(`/groups/${groupId}/members/${encodeURIComponent(memberId)}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async getGroupTasks(groupId: string): Promise<GroupTask[]> {
+        return this.request<GroupTask[]>(`/groups/${groupId}/tasks`);
+    }
+
+    async addGroupTask(groupId: string, taskId: string, assignedTo: string[] = [], milestone: Record<string, unknown> = {}, progress = 0): Promise<GroupTask> {
+        return this.request<GroupTask>(`/groups/${groupId}/tasks`, {
+            method: 'POST',
+            body: JSON.stringify({ task_id: taskId, assigned_to: assignedTo, milestone, progress }),
+        });
     }
 }
 

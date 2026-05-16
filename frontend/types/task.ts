@@ -55,6 +55,29 @@ export interface ScheduleRecommendation {
     energy_match: boolean;
 }
 
+export interface Group {
+    id: string;
+    name: string;
+    description?: string | null;
+    owner_id: string;
+    member_ids: string[];
+    settings: Record<string, unknown>;
+    is_active: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface GroupTask {
+    id: string;
+    group_id: string;
+    task_id: string;
+    assigned_to: string[];
+    milestone: Record<string, unknown>;
+    progress: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export interface UserPreferences {
     working_hours_start: string;
     working_hours_end: string;

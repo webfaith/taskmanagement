@@ -101,6 +101,8 @@ APPWRITE_COLLECTION_ID_TASKS=tasks_collection
 APPWRITE_COLLECTION_ID_SCHEDULES=schedules_collection
 APPWRITE_COLLECTION_ID_NOTIFICATIONS=notifications_collection
 APPWRITE_COLLECTION_ID_ANALYTICS=analytics_collection
+APPWRITE_COLLECTION_ID_GROUPS=groups_collection
+APPWRITE_COLLECTION_ID_GROUP_TASKS=group_tasks_collection
 
 # Google Calendar integration
 GOOGLE_CLIENT_ID=your-google-client-id

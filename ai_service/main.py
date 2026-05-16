@@ -103,6 +103,8 @@ TASKS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_TASKS', 'tasks_collection')
 SCHEDULES_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_SCHEDULES', 'schedules_collection')
 NOTIFICATIONS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_NOTIFICATIONS', 'notifications_collection')
 ANALYTICS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_ANALYTICS', 'analytics_collection')
+GROUPS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_GROUPS', 'groups_collection')
+GROUP_TASKS_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_GROUP_TASKS', 'group_tasks_collection')
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
@@ -229,6 +231,32 @@ class NotificationPreferences(BaseModel):
     reminder_times: List[int] = [24, 1]  # hours before deadline
     deadline_alerts: bool = True
     progress_reminders: bool = True
+
+
+class GroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    member_ids: List[str] = []
+    settings: Dict[str, Any] = {}
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    member_ids: Optional[List[str]] = None
+    settings: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+
+class GroupMemberRequest(BaseModel):
+    user_id: str
+
+
+class GroupTaskCreate(BaseModel):
+    task_id: str
+    assigned_to: List[str] = []
+    milestone: Dict[str, Any] = {}
+    progress: float = 0.0
 
 
 class GoogleCalendarCallback(BaseModel):
@@ -397,6 +425,45 @@ def _refresh_google_token_if_needed(user_doc: Dict[str, Any]) -> Optional[str]:
         pass
 
     return new_access
+
+
+def _parse_group_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": doc.get("$id"),
+        "name": doc.get("name", ""),
+        "description": doc.get("description"),
+        "owner_id": doc.get("owner_id"),
+        "member_ids": _parse_json_field(doc.get("member_ids"), []),
+        "settings": _parse_json_field(doc.get("settings"), {}),
+        "is_active": doc.get("is_active", True),
+        "created_at": doc.get("created_at") or doc.get("$createdAt"),
+        "updated_at": doc.get("updated_at") or doc.get("$updatedAt"),
+    }
+
+
+def _parse_group_task_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": doc.get("$id"),
+        "group_id": doc.get("group_id"),
+        "task_id": doc.get("task_id"),
+        "assigned_to": _parse_json_field(doc.get("assigned_to"), []),
+        "milestone": _parse_json_field(doc.get("milestone"), {}),
+        "progress": doc.get("progress", 0.0),
+        "created_at": doc.get("created_at") or doc.get("$createdAt"),
+        "updated_at": doc.get("updated_at") or doc.get("$updatedAt"),
+    }
+
+
+def _get_group_accessible_doc(group_id: str, user_id: str) -> Dict[str, Any]:
+    group = databases.get_document(
+        database_id=DATABASE_ID,
+        collection_id=GROUPS_COLLECTION,
+        document_id=group_id
+    )
+    members = _parse_json_field(group.get("member_ids"), [])
+    if group.get("owner_id") != user_id and user_id not in members:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return group
 
 
 def calculate_priority(deadline: datetime, estimated_hours: float, category: str) -> Tuple[int, str]:
@@ -2349,6 +2416,226 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
             "theme": update_data.get('theme', 'system'),
             "notification_preferences": notification_prefs
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Group Collaboration ====================
+
+@app.post("/groups")
+async def create_group(group: GroupCreate, user_id: str = Depends(get_user_id)):
+    try:
+        member_ids = list(dict.fromkeys([user_id, *group.member_ids]))
+        payload = {
+            "name": group.name,
+            "description": group.description,
+            "owner_id": user_id,
+            "member_ids": json.dumps(member_ids),
+            "settings": json.dumps(group.settings or {}),
+            "is_active": True,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+        result = databases.create_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+            document_id=ID.unique(),
+            data=payload,
+        )
+        return _parse_group_doc(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/groups")
+async def list_groups(user_id: str = Depends(get_user_id)):
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+        )
+        groups = []
+        for doc in result.get("documents", []):
+            parsed = _parse_group_doc(doc)
+            if parsed["owner_id"] == user_id or user_id in parsed["member_ids"]:
+                groups.append(parsed)
+        groups.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        return groups
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/groups/{group_id}")
+async def get_group(group_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        group = _get_group_accessible_doc(group_id, user_id)
+        tasks_result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_TASKS_COLLECTION,
+            queries=[Query.equal("group_id", group_id)],
+        )
+        return {
+            "group": _parse_group_doc(group),
+            "tasks": [_parse_group_task_doc(doc) for doc in tasks_result.get("documents", [])],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/groups/{group_id}")
+async def update_group(group_id: str, update: GroupUpdate, user_id: str = Depends(get_user_id)):
+    try:
+        existing = _get_group_accessible_doc(group_id, user_id)
+        update_data: Dict[str, Any] = {"updated_at": datetime.now().isoformat()}
+        if update.name is not None:
+            update_data["name"] = update.name
+        if update.description is not None:
+            update_data["description"] = update.description
+        if update.member_ids is not None:
+            update_data["member_ids"] = json.dumps(list(dict.fromkeys([existing.get("owner_id"), *update.member_ids])))
+        if update.settings is not None:
+            update_data["settings"] = json.dumps(update.settings)
+        if update.is_active is not None:
+            update_data["is_active"] = update.is_active
+        result = databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+            document_id=group_id,
+            data=update_data,
+        )
+        return _parse_group_doc(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/groups/{group_id}")
+async def delete_group(group_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        group = _get_group_accessible_doc(group_id, user_id)
+        if group.get("owner_id") != user_id:
+            raise HTTPException(status_code=403, detail="Only the group owner can delete the group")
+
+        group_tasks = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_TASKS_COLLECTION,
+            queries=[Query.equal("group_id", group_id)],
+        )
+        for task in group_tasks.get("documents", []):
+            databases.delete_document(
+                database_id=DATABASE_ID,
+                collection_id=GROUP_TASKS_COLLECTION,
+                document_id=task["$id"],
+            )
+
+        databases.delete_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+            document_id=group_id,
+        )
+        return {"message": "Group deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/groups/{group_id}/members")
+async def add_group_member(group_id: str, payload: GroupMemberRequest, user_id: str = Depends(get_user_id)):
+    try:
+        group = _get_group_accessible_doc(group_id, user_id)
+        if group.get("owner_id") != user_id:
+            raise HTTPException(status_code=403, detail="Only the group owner can manage members")
+        members = _parse_json_field(group.get("member_ids"), [])
+        if payload.user_id not in members:
+            members.append(payload.user_id)
+        result = databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+            document_id=group_id,
+            data={
+                "member_ids": json.dumps(members),
+                "updated_at": datetime.now().isoformat(),
+            }
+        )
+        return _parse_group_doc(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/groups/{group_id}/members/{member_id}")
+async def remove_group_member(group_id: str, member_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        group = _get_group_accessible_doc(group_id, user_id)
+        if group.get("owner_id") != user_id:
+            raise HTTPException(status_code=403, detail="Only the group owner can manage members")
+        members = [m for m in _parse_json_field(group.get("member_ids"), []) if m != member_id and m != group.get("owner_id")]
+        result = databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUPS_COLLECTION,
+            document_id=group_id,
+            data={
+                "member_ids": json.dumps(members),
+                "updated_at": datetime.now().isoformat(),
+            }
+        )
+        return _parse_group_doc(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/groups/{group_id}/tasks")
+async def add_group_task(group_id: str, payload: GroupTaskCreate, user_id: str = Depends(get_user_id)):
+    try:
+        group = _get_group_accessible_doc(group_id, user_id)
+        task = databases.get_document(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            document_id=payload.task_id,
+        )
+        if task.get("user_id") != user_id and group.get("owner_id") != user_id and user_id not in _parse_json_field(group.get("member_ids"), []):
+            raise HTTPException(status_code=403, detail="Access denied")
+        data = {
+            "group_id": group_id,
+            "task_id": payload.task_id,
+            "assigned_to": json.dumps(list(dict.fromkeys(payload.assigned_to))),
+            "milestone": json.dumps(payload.milestone or {}),
+            "progress": payload.progress,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }
+        result = databases.create_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_TASKS_COLLECTION,
+            document_id=ID.unique(),
+            data=data,
+        )
+        return _parse_group_task_doc(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/groups/{group_id}/tasks")
+async def list_group_tasks(group_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        _get_group_accessible_doc(group_id, user_id)
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_TASKS_COLLECTION,
+            queries=[Query.equal("group_id", group_id)],
+        )
+        return [_parse_group_task_doc(doc) for doc in result.get("documents", [])]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
