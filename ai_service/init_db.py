@@ -120,6 +120,49 @@ def setup_database():
                 {'type': 'string', 'key': 'goals_met', 'size': 2000, 'required': False},  # JSON array
                 {'type': 'datetime', 'key': 'created_at', 'required': True},
             ]
+        },
+        {
+            'name': 'evaluation',
+            'id': 'evaluation_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'user_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'metric_type', 'size': 100, 'required': True},
+                {'type': 'float', 'key': 'value', 'required': True},
+                {'type': 'datetime', 'key': 'date', 'required': True},
+            ]
+        },
+        {
+            'name': 'feedback',
+            'id': 'feedback_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'user_id', 'size': 64, 'required': True},
+                {'type': 'integer', 'key': 'rating', 'required': True},
+                {'type': 'string', 'key': 'category', 'size': 100, 'required': True},
+                {'type': 'string', 'key': 'comment', 'size': 5000, 'required': False},
+                {'type': 'datetime', 'key': 'created_at', 'required': True},
+            ]
+        },
+        {
+            'name': 'survey',
+            'id': 'survey_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'user_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'answers', 'size': 10000, 'required': True},
+                {'type': 'datetime', 'key': 'completed_at', 'required': True},
+            ]
+        },
+        {
+            'name': 'stories',
+            'id': 'stories_collection',
+            'attributes': [
+                {'type': 'string', 'key': 'user_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'anonymous_id', 'size': 64, 'required': True},
+                {'type': 'string', 'key': 'story', 'size': 5000, 'required': True},
+                {'type': 'float', 'key': 'productivity_before', 'required': True},
+                {'type': 'float', 'key': 'productivity_after', 'required': True},
+                {'type': 'string', 'key': 'tips', 'size': 10000, 'required': False},
+                {'type': 'datetime', 'key': 'created_at', 'required': True},
+            ]
         }
     ]
     
@@ -199,6 +242,20 @@ def create_indexes():
         
         # Analytics indexes
         {'table': 'analytics_collection', 'key': 'idx_analytics_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
+        
+        # Evaluation indexes
+        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_date', 'columns': ['user_id', 'date'], 'type': IndexType.KEY},
+        {'table': 'evaluation_collection', 'key': 'idx_evaluation_user_metric', 'columns': ['user_id', 'metric_type'], 'type': IndexType.KEY},
+        
+        # Feedback indexes
+        {'table': 'feedback_collection', 'key': 'idx_feedback_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
+        {'table': 'feedback_collection', 'key': 'idx_feedback_user_category', 'columns': ['user_id', 'category'], 'type': IndexType.KEY},
+        
+        # Survey indexes
+        {'table': 'survey_collection', 'key': 'idx_survey_user_completed', 'columns': ['user_id', 'completed_at'], 'type': IndexType.KEY},
+        
+        # Stories indexes
+        {'table': 'stories_collection', 'key': 'idx_stories_user_created', 'columns': ['user_id', 'created_at'], 'type': IndexType.KEY},
     ]
     
     for idx in indexes_data:

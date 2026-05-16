@@ -12,6 +12,10 @@ node_modules/
 out/
 build/
 .DS_Store
+.env.local
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.production.local
 
 # Git
 .git/

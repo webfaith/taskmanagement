@@ -19,7 +19,11 @@ DB_ID = os.getenv('APPWRITE_DATABASE_ID', 'scheduler_db')
 collections = [
     os.getenv('APPWRITE_COLLECTION_ID_TASKS', 'tasks_collection'),
     os.getenv('APPWRITE_COLLECTION_ID_PROFILES', 'user_profiles_collection'),
-    os.getenv('APPWRITE_COLLECTION_ID_COURSES', 'courses_collection')
+    os.getenv('APPWRITE_COLLECTION_ID_COURSES', 'courses_collection'),
+    os.getenv('APPWRITE_COLLECTION_ID_EVALUATION', 'evaluation_collection'),
+    os.getenv('APPWRITE_COLLECTION_ID_FEEDBACK', 'feedback_collection'),
+    os.getenv('APPWRITE_COLLECTION_ID_SURVEY', 'survey_collection'),
+    os.getenv('APPWRITE_COLLECTION_ID_STORIES', 'stories_collection'),
 ]
 
 def update_permissions():

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { account } from "@/lib/appwrite";
+import { account, isAppwriteConfigured } from "@/lib/appwrite";
 import apiClient from "@/lib/api";
 import { ID, Models } from "appwrite";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,8 @@ interface AuthContextType {
     loading: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (email: string, password: string, name: string) => Promise<void>;
+    requestPasswordReset: (email: string, redirectUrl: string) => Promise<void>;
+    completePasswordReset: (userId: string, secret: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 
@@ -28,6 +30,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const checkUserStatus = async () => {
+        if (!isAppwriteConfigured) {
+            setUser(null);
+            setUserId(null);
+            setLoading(false);
+            return;
+        }
+
         try {
             const currentUser = await account.get();
             setUser(currentUser);
@@ -57,6 +66,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const login = async (email: string, password: string) => {
+        if (!isAppwriteConfigured) {
+            throw new Error("Appwrite is not configured. Set NEXT_PUBLIC_APPWRITE_ENDPOINT and NEXT_PUBLIC_APPWRITE_PROJECT_ID.");
+        }
+
         try {
             // Logout any existing session before creating a new one
             try {
@@ -89,6 +102,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const register = async (email: string, password: string, name: string) => {
+        if (!isAppwriteConfigured) {
+            throw new Error("Appwrite is not configured. Set NEXT_PUBLIC_APPWRITE_ENDPOINT and NEXT_PUBLIC_APPWRITE_PROJECT_ID.");
+        }
+
         try {
             await account.create(ID.unique(), email, password, name);
             await login(email, password);
@@ -98,7 +115,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
+    const requestPasswordReset = async (email: string, redirectUrl: string) => {
+        if (!isAppwriteConfigured) {
+            throw new Error("Appwrite is not configured. Set NEXT_PUBLIC_APPWRITE_ENDPOINT and NEXT_PUBLIC_APPWRITE_PROJECT_ID.");
+        }
+
+        try {
+            await account.createRecovery(email, redirectUrl);
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
+    const completePasswordReset = async (userId: string, secret: string, password: string) => {
+        if (!isAppwriteConfigured) {
+            throw new Error("Appwrite is not configured. Set NEXT_PUBLIC_APPWRITE_ENDPOINT and NEXT_PUBLIC_APPWRITE_PROJECT_ID.");
+        }
+
+        try {
+            await account.updateRecovery(userId, secret, password);
+        } catch (error) {
+            console.error(error);
+            throw error;
+        }
+    };
+
     const logout = async () => {
+        if (!isAppwriteConfigured) {
+            setUser(null);
+            setUserId(null);
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('user_id');
+                localStorage.removeItem('auth_token');
+            }
+            router.push("/login");
+            return;
+        }
+
         try {
             await account.deleteSession("current");
             setUser(null);
@@ -114,7 +168,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, userId, loading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, userId, loading, login, register, requestPasswordReset, completePasswordReset, logout }}>
             {children}
         </AuthContext.Provider>
     );
