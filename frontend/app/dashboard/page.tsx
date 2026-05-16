@@ -83,8 +83,8 @@ export default function DashboardPage() {
 
     const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const getDayName = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return daysOfWeek[date.getDay()] || "";
+        const d = dateStr ? new Date(dateStr) : new Date();
+        return isNaN(d.getTime()) ? "" : daysOfWeek[d.getDay()] || "";
     };
 
     const totalTasks = stats?.total_tasks || tasks.length;
@@ -202,7 +202,7 @@ export default function DashboardPage() {
                                                             <span className="text-[10px] font-bold text-indigo-500/80 uppercase">P{task.priority}</span>
                                                         </div>
                                                         <p className="text-xs text-gray-400 dark:text-gray-500">
-                                                            {new Date(task.deadline).toLocaleDateString()}
+                                                            {task.deadline ? (() => { const d = new Date(task.deadline); return isNaN(d.getTime()) ? 'No date' : d.toLocaleDateString(); })() : 'No date'}
                                                         </p>
                                                     </div>
                                                     <span className={`text-xs px-1.5 py-0.5 rounded-md shrink-0 ${task.category === 'academic' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :

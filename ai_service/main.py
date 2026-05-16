@@ -2,7 +2,7 @@
 Student Task Management System - FastAPI Backend
 Comprehensive API for task management, scheduling, and notifications
 """
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Tuple
@@ -11,13 +11,390 @@ from datetime import datetime, timedelta
 from enum import Enum
 from urllib import parse, request as urlrequest
 from urllib.error import HTTPError, URLError
+from copy import deepcopy
 import json
 import os
+from uuid import uuid4
 from dotenv import load_dotenv
-from appwrite.client import Client
-from appwrite.services.databases import Databases
-from appwrite.query import Query
-from appwrite.id import ID
+
+APPWRITE_AVAILABLE = True
+try:
+    from appwrite.client import Client
+    from appwrite.query import Query
+    from appwrite.id import ID
+    from appwrite.services.tables_db import TablesDB
+except ImportError:
+    APPWRITE_AVAILABLE = False
+
+    class Client:  # type: ignore[no-redef]
+        def set_endpoint(self, *_args, **_kwargs):
+            return self
+
+        def set_project(self, *_args, **_kwargs):
+            return self
+
+        def set_key(self, *_args, **_kwargs):
+            return self
+
+    class ID:  # type: ignore[no-redef]
+        @staticmethod
+        def unique():
+            return str(uuid4())
+
+    class Query:  # type: ignore[no-redef]
+        @staticmethod
+        def equal(field: str, value: Any):
+            return ("equal", field, value)
+
+        @staticmethod
+        def not_equal(field: str, value: Any):
+            return ("not_equal", field, value)
+
+        @staticmethod
+        def greater_than_equal(field: str, value: Any):
+            return ("gte", field, value)
+
+        @staticmethod
+        def less_than_equal(field: str, value: Any):
+            return ("lte", field, value)
+
+        @staticmethod
+        def order_desc(field: str):
+            return ("order_desc", field)
+
+        @staticmethod
+        def limit(value: int):
+            return ("limit", value)
+
+
+DEMO_MODE = not APPWRITE_AVAILABLE
+
+
+def _is_datetime_string(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return True
+    except Exception:
+        return False
+
+
+def _normalize_query_value(value: Any) -> Any:
+    if isinstance(value, str):
+        if _is_datetime_string(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
+    return value
+
+
+class FakeTablesDB:
+    def __init__(self):
+        self._tables: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+    def _table(self, table_id: str) -> Dict[str, Dict[str, Any]]:
+        return self._tables.setdefault(table_id, {})
+
+    def _wrap(self, document_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        now = datetime.now().isoformat()
+        document = {"$id": document_id, "$createdAt": now, "$updatedAt": now}
+        document.update(deepcopy(data))
+        return document
+
+    def _coerce_rows(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [deepcopy(row) for row in rows]
+
+    def _matches(self, document: Dict[str, Any], query: Any) -> bool:
+        if not isinstance(query, tuple) or not query:
+            return True
+
+        op = query[0]
+        if op == "equal":
+            _, field, value = query
+            return _normalize_query_value(document.get(field)) == _normalize_query_value(value)
+        if op == "not_equal":
+            _, field, value = query
+            return _normalize_query_value(document.get(field)) != _normalize_query_value(value)
+        if op == "gte":
+            _, field, value = query
+            left = _normalize_query_value(document.get(field))
+            right = _normalize_query_value(value)
+            try:
+                return left >= right
+            except Exception:
+                return str(left) >= str(right)
+        if op == "lte":
+            _, field, value = query
+            left = _normalize_query_value(document.get(field))
+            right = _normalize_query_value(value)
+            try:
+                return left <= right
+            except Exception:
+                return str(left) <= str(right)
+        return True
+
+    def _seed_demo_data(self, user_id: str):
+        if self._table(USERS_COLLECTION):
+            existing_users = self._table(USERS_COLLECTION)
+            if any(doc.get("user_id") == user_id for doc in existing_users.values()):
+                return
+        now = datetime.now().isoformat()
+        self.create_row(
+            table_id=USERS_COLLECTION,
+            row_id=f"{user_id}-profile",
+            data={
+                "user_id": user_id,
+                "email": f"{user_id}@example.com" if "@" not in user_id else user_id,
+                "display_name": user_id.replace(".", " ").title() if "@" not in user_id else user_id.split("@")[0].title(),
+                "timezone": "Africa/Lagos",
+                "schedule_preferences": json.dumps({
+                    "working_hours_start": "08:00",
+                    "working_hours_end": "18:00",
+                    "energy_pattern": "morning",
+                }),
+                "notification_prefs": json.dumps({"email": True, "push": True, "reminder_minutes": 30}),
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        demo_tasks = [
+            {
+                "$id": f"{user_id}-task-1",
+                "title": "Complete Math Assignment",
+                "description": "Finish algebra problem set",
+                "user_id": user_id,
+                "userId": user_id,
+                "category": "academic",
+                "priority": 1,
+                "deadline": (datetime.now() + timedelta(days=1)).isoformat(),
+                "dueDate": (datetime.now() + timedelta(days=1)).isoformat(),
+                "estimated_hours": 2,
+                "actual_hours": 0.0,
+                "energy_level": "high",
+                "status": "in_progress",
+                "scheduled_start": None,
+                "scheduled_end": None,
+                "completed_at": None,
+                "tags": json.dumps(["math", "algebra"]),
+                "is_recurring": False,
+                "recurring_rule": None,
+                "created_at": (datetime.now() - timedelta(days=2)).isoformat(),
+                "updated_at": now,
+            },
+            {
+                "$id": f"{user_id}-task-2",
+                "title": "Review project notes",
+                "description": "Summarize key meeting points",
+                "user_id": user_id,
+                "userId": user_id,
+                "category": "work",
+                "priority": 2,
+                "deadline": (datetime.now() + timedelta(days=2)).isoformat(),
+                "dueDate": (datetime.now() + timedelta(days=2)).isoformat(),
+                "estimated_hours": 1.5,
+                "actual_hours": 0.0,
+                "energy_level": "medium",
+                "status": "todo",
+                "scheduled_start": None,
+                "scheduled_end": None,
+                "completed_at": None,
+                "tags": json.dumps(["review", "notes"]),
+                "is_recurring": False,
+                "recurring_rule": None,
+                "created_at": (datetime.now() - timedelta(days=1)).isoformat(),
+                "updated_at": now,
+            },
+            {
+                "$id": f"{user_id}-task-3",
+                "title": "Plan weekend study block",
+                "description": "Set up a focused study session",
+                "user_id": user_id,
+                "userId": user_id,
+                "category": "personal",
+                "priority": 3,
+                "deadline": (datetime.now() + timedelta(days=4)).isoformat(),
+                "dueDate": (datetime.now() + timedelta(days=4)).isoformat(),
+                "estimated_hours": 1,
+                "actual_hours": 0.0,
+                "energy_level": "low",
+                "status": "completed",
+                "scheduled_start": None,
+                "scheduled_end": None,
+                "completed_at": (datetime.now() - timedelta(days=1)).isoformat(),
+                "tags": json.dumps(["planning"]),
+                "is_recurring": False,
+                "recurring_rule": None,
+                "created_at": (datetime.now() - timedelta(days=4)).isoformat(),
+                "updated_at": now,
+            },
+        ]
+        for task in demo_tasks:
+            self.create_row(TASKS_COLLECTION, task["$id"], {k: v for k, v in task.items() if k != "$id"})
+
+        notifications = [
+            {
+                "user_id": user_id,
+                "type": "deadline",
+                "title": "Math assignment due tomorrow",
+                "message": "Your algebra assignment is coming up soon.",
+                "task_id": f"{user_id}-task-1",
+                "scheduled_for": (datetime.now() + timedelta(days=1)).isoformat(),
+                "is_read": False,
+                "channel": "in_app",
+                "created_at": (datetime.now() - timedelta(days=1)).isoformat(),
+            },
+            {
+                "user_id": user_id,
+                "type": "reminder",
+                "title": "Time to review your tasks",
+                "message": "A short review session can help you stay on track.",
+                "task_id": None,
+                "scheduled_for": (datetime.now() - timedelta(days=3)).isoformat(),
+                "is_read": True,
+                "channel": "in_app",
+                "created_at": (datetime.now() - timedelta(days=3)).isoformat(),
+            },
+        ]
+        for index, notification in enumerate(notifications, start=1):
+            self.create_row(NOTIFICATIONS_COLLECTION, f"{user_id}-notification-{index}", notification)
+
+        self.create_row(
+            SCHEDULES_COLLECTION,
+            f"{user_id}-schedule-{datetime.now().date().isoformat()}",
+            {
+                "user_id": user_id,
+                "date": datetime.now().date().isoformat(),
+                "free_slots": json.dumps([
+                    {"start": "09:00", "end": "10:30"},
+                    {"start": "14:00", "end": "16:00"},
+                ]),
+                "commitments": json.dumps([
+                    {"start": "11:00", "end": "12:00", "title": "Class"},
+                ]),
+                "working_hours": json.dumps({"start": "08:00", "end": "18:00"}),
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+
+        self.create_row(
+            GROUPS_COLLECTION,
+            f"{user_id}-group-1",
+            {
+                "name": "Study Buddies",
+                "description": "Shared study group for coursework and exams.",
+                "owner_id": user_id,
+                "member_ids": json.dumps([user_id, "member-1", "member-2"]),
+                "settings": json.dumps({}),
+                "is_active": True,
+                "created_at": (datetime.now() - timedelta(days=7)).isoformat(),
+                "updated_at": (datetime.now() - timedelta(days=1)).isoformat(),
+            },
+        )
+        self.create_row(
+            GROUPS_COLLECTION,
+            f"{user_id}-group-2",
+            {
+                "name": "Project Team",
+                "description": "Coordinate group assignments and reviews.",
+                "owner_id": user_id,
+                "member_ids": json.dumps([user_id, "member-3"]),
+                "settings": json.dumps({}),
+                "is_active": True,
+                "created_at": (datetime.now() - timedelta(days=10)).isoformat(),
+                "updated_at": (datetime.now() - timedelta(days=2)).isoformat(),
+            },
+        )
+        self.create_row(
+            GROUP_TASKS_COLLECTION,
+            f"{user_id}-group-task-1",
+            {
+                "group_id": f"{user_id}-group-1",
+                "task_id": f"{user_id}-task-1",
+                "assigned_to": json.dumps(["member-1"]),
+                "milestone": json.dumps({"name": "First draft"}),
+                "progress": 45,
+                "created_at": (datetime.now() - timedelta(days=2)).isoformat(),
+                "updated_at": (datetime.now() - timedelta(days=1)).isoformat(),
+            },
+        )
+
+    def create_row(self, table_id: str, row_id: str, data: Dict[str, Any]):
+        document = self._wrap(row_id, data)
+        self._table(table_id)[row_id] = document
+        return deepcopy(document)
+
+    def list_rows(self, table_id: str, queries: Optional[List[Any]] = None):
+        rows = list(self._table(table_id).values())
+        user_id = None
+        for query in queries or []:
+            if isinstance(query, tuple) and len(query) >= 3 and query[0] == "equal" and query[1] == "user_id":
+                user_id = query[2]
+                break
+
+        if DEMO_MODE and not rows:
+            self._seed_demo_data(user_id or "demo-user")
+            rows = list(self._table(table_id).values())
+
+        filtered = rows
+        order_field = None
+        order_desc = False
+        limit = None
+
+        for query in queries or []:
+            if not isinstance(query, tuple) or not query:
+                continue
+            op = query[0]
+            if op == "order_desc" and len(query) >= 2:
+                order_field = query[1]
+                order_desc = True
+                continue
+            if op == "limit" and len(query) >= 2:
+                limit = int(query[1])
+                continue
+            filtered = [row for row in filtered if self._matches(row, query)]
+
+        if order_field:
+            filtered = sorted(filtered, key=lambda row: row.get(order_field) or "", reverse=order_desc)
+        if limit is not None:
+            filtered = filtered[:limit]
+        return {"documents": self._coerce_rows(filtered)}
+
+    def get_row(self, table_id: str, row_id: str):
+        table = self._table(table_id)
+        if row_id not in table:
+            raise Exception("Document not found")
+        return deepcopy(table[row_id])
+
+    def update_row(self, table_id: str, row_id: str, data: Dict[str, Any]):
+        table = self._table(table_id)
+        if row_id not in table:
+            raise Exception("Document not found")
+        table[row_id].update(deepcopy(data))
+        table[row_id]["$updatedAt"] = datetime.now().isoformat()
+        return deepcopy(table[row_id])
+
+    def delete_row(self, table_id: str, row_id: str):
+        table = self._table(table_id)
+        if row_id not in table:
+            raise Exception("Document not found")
+        del table[row_id]
+        return {}
+
+    def list_tables(self, *_args, **_kwargs):
+        return {"tables": []}
+
+    def create_table(self, *_args, **_kwargs):
+        return {}
+
+    def delete_table(self, *_args, **_kwargs):
+        return {}
+
+    def get_table(self, *_args, **_kwargs):
+        return {}
 
 # Load environment variables from the same directory as this file
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -35,22 +412,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],
+allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Appwrite Client Setup
-client = Client()
-client.set_endpoint(os.getenv('APPWRITE_ENDPOINT', 'https://fra.cloud.appwrite.io/v1'))
-client.set_project(os.getenv('APPWRITE_PROJECT_ID', ''))
-client.set_key(os.getenv('APPWRITE_API_KEY', ''))
-
-from appwrite.services.tables_db import TablesDB
-
 class DatabasesWrapper:
     """
-    Adapter to map old Databases service calls to the new TablesDB service
+    Adapter to map old Databases service calls to the new TablesDB service.
+    Falls back to the in-memory fake database when Appwrite is unavailable.
     """
+
     def __init__(self, service):
         self.service = service
         self.mapping = {
@@ -64,35 +435,39 @@ class DatabasesWrapper:
             'delete_collection': 'delete_table',
             'get_collection': 'get_table',
         }
-        
+
     def __getattr__(self, name):
-        # Map old names to new ones if they exist in our mapping
         mapped_name = self.mapping.get(name, name)
         attr = getattr(self.service, mapped_name, None)
-        
+
         if attr is None:
-            # Fallback if attribute not found in TablesDB but exists in another service
-            # This shouldn't normally happen if we're only using TablesDB
-            raise AttributeError(f"'TablesDB' object has no attribute '{mapped_name}'")
+            raise AttributeError(f"'{type(self.service).__name__}' object has no attribute '{mapped_name}'")
 
         if callable(attr):
             def wrapper(*args, **kwargs):
-                # Map old argument names to new ones if passed as kwargs
+                if 'database_id' in kwargs:
+                    kwargs.pop('database_id')
                 if 'collection_id' in kwargs:
                     kwargs['table_id'] = kwargs.pop('collection_id')
                 if 'document_id' in kwargs:
                     kwargs['row_id'] = kwargs.pop('document_id')
-                
+
                 result = attr(*args, **kwargs)
-                # If the result is a model object from modern Appwrite SDK, convert it to dict
                 if hasattr(result, 'to_dict'):
                     return result.to_dict()
                 return result
+
             return wrapper
         return attr
 
-# Initialize with TablesDB
-tables_db_raw = TablesDB(client)
+
+# Appwrite Client Setup
+client = Client()
+client.set_endpoint(os.getenv('APPWRITE_ENDPOINT', 'https://fra.cloud.appwrite.io/v1'))
+client.set_project(os.getenv('APPWRITE_PROJECT_ID', ''))
+client.set_key(os.getenv('APPWRITE_API_KEY', ''))
+
+tables_db_raw = FakeTablesDB() if not APPWRITE_AVAILABLE else TablesDB(client)
 databases = DatabasesWrapper(tables_db_raw)
 
 DATABASE_ID = os.getenv('APPWRITE_DATABASE_ID', 'scheduler_db')
@@ -110,6 +485,14 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', '')
 GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+
+
+@app.middleware("http")
+async def add_demo_mode_header(request: Request, call_next):
+    response = await call_next(request)
+    if DEMO_MODE:
+        response.headers["X-Demo-Mode"] = "true"
+    return response
 
 
 # ==================== Pydantic Models ====================
@@ -293,6 +676,8 @@ def make_naive(dt: Any) -> datetime:
 def get_user_id(x_user_id: Optional[str] = Header(None)) -> str:
     """Extract user_id from header - in production, this would validate JWT tokens"""
     if not x_user_id:
+        if DEMO_MODE:
+            return "demo-user"
         raise HTTPException(status_code=401, detail="User ID required in header")
     return x_user_id
 
@@ -902,42 +1287,49 @@ async def get_schedule(date: str, user_id: str = Depends(get_user_id)):
 
 @app.put("/schedule/preferences")
 async def set_schedule_preferences(prefs: SchedulePreferences, user_id: str = Depends(get_user_id)):
-    """Set user's schedule preferences"""
+    """Set user's schedule preferences inside schedule_preferences JSON"""
     try:
-        # Try to get existing user profile
+        now = datetime.now().isoformat()
+        prefs_data: Dict[str, Any] = {
+            'preferred_start_time': prefs.preferred_start_time,
+            'preferred_end_time': prefs.preferred_end_time,
+            'working_hours_start': prefs.preferred_start_time,
+            'working_hours_end': prefs.preferred_end_time,
+            'study_slots': json.dumps(prefs.study_slots),
+            'sleep_schedule': json.dumps(prefs.sleep_schedule),
+            'updated_at': now,
+        }
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        
-        prefs_data = {
-            'preferred_start_time': prefs.preferred_start_time,
-            'preferred_end_time': prefs.preferred_end_time,
-            'study_slots': json.dumps(prefs.study_slots),
-            'sleep_schedule': json.dumps(prefs.sleep_schedule),
-            'updated_at': datetime.now().isoformat()
-        }
-        
         if result.get('documents'):
+            existing = result['documents'][0]
+            merged = {**_parse_json_field(existing.get('schedule_preferences'), {}),
+                      **{k: v for k, v in prefs_data.items() if k != 'updated_at'}}
             databases.update_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id=result['documents'][0]['$id'],
-                data=prefs_data
+                document_id=existing['$id'],
+                data={
+                    'schedule_preferences': json.dumps(merged),
+                    'updated_at': now,
+                },
             )
         else:
-            # Create new profile
-            prefs_data['user_id'] = user_id
-            prefs_data['created_at'] = datetime.now().isoformat()
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
                 document_id=ID.unique(),
-                data=prefs_data
+                data={
+                    'user_id': user_id,
+                    'schedule_preferences': json.dumps({k: v for k, v in prefs_data.items() if k != 'updated_at'}),
+                    'created_at': now,
+                    'updated_at': now,
+                },
             )
-        
-        return {"message": "Preferences updated successfully", "preferences": prefs}
+        return {"message": "Preferences updated successfully", "preferences": prefs_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2139,7 +2531,7 @@ async def optimize_schedule_date(date: str, user_id: str = Depends(get_user_id))
 
 @app.get("/schedule/working-hours")
 async def get_working_hours(user_id: str = Depends(get_user_id)):
-    """Get user's preferred working hours"""
+    """Get user's preferred working hours from schedule_preferences JSON"""
     try:
         result = databases.list_documents(
             database_id=DATABASE_ID,
@@ -2148,9 +2540,12 @@ async def get_working_hours(user_id: str = Depends(get_user_id)):
         )
         if result.get('documents'):
             doc = result['documents'][0]
+            prefs = _parse_json_field(doc.get('schedule_preferences'), {})
             return {
-                "start": doc.get('preferred_start_time', '08:00'),
-                "end": doc.get('preferred_end_time', '22:00')
+                "start": prefs.get('working_hours_start',
+                    prefs.get('preferred_start_time', '08:00')),
+                "end": prefs.get('working_hours_end',
+                    prefs.get('preferred_end_time', '22:00'))
             }
         return {"start": "08:00", "end": "22:00"}
     except Exception as e:
@@ -2159,35 +2554,47 @@ async def get_working_hours(user_id: str = Depends(get_user_id)):
 
 @app.put("/schedule/working-hours")
 async def update_working_hours(hours: dict, user_id: str = Depends(get_user_id)):
-    """Update user's preferred working hours"""
+    """Update user's preferred working hours inside schedule_preferences JSON"""
     try:
         result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=USERS_COLLECTION,
             queries=[Query.equal('user_id', user_id)]
         )
-        update_data = {
+        now = datetime.now().isoformat()
+        new_entries = {
+            'working_hours_start': hours.get('start', '08:00'),
+            'working_hours_end': hours.get('end', '22:00'),
             'preferred_start_time': hours.get('start', '08:00'),
             'preferred_end_time': hours.get('end', '22:00'),
-            'updated_at': datetime.now().isoformat()
         }
         if result.get('documents'):
+            existing = result['documents'][0]
+            merged = {**_parse_json_field(existing.get('schedule_preferences'), {}), **new_entries}
             databases.update_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id=result['documents'][0]['$id'],
-                data=update_data
+                document_id=existing['$id'],
+                data={
+                    'schedule_preferences': json.dumps(merged),
+                    'updated_at': now,
+                },
             )
         else:
-            update_data['user_id'] = user_id
-            update_data['created_at'] = datetime.now().isoformat()
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
                 document_id=ID.unique(),
-                data=update_data
+                data={
+                    'user_id': user_id,
+                    'schedule_preferences': json.dumps(new_entries),
+                    'created_at': now,
+                    'updated_at': now,
+                },
             )
-        return {"message": "Working hours updated", **update_data}
+        return {"message": "Working hours updated", **new_entries}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2351,20 +2758,29 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
         )
         if result.get('documents'):
             doc = result['documents'][0]
-            notification_prefs = json.loads(doc.get('notification_prefs', '{}'))
+            schedule_prefs = _parse_json_field(doc.get('schedule_preferences'), {})
+            notification_prefs = _parse_json_field(doc.get('notification_prefs'), {})
             return {
-                "working_hours_start": doc.get('working_hours_start', doc.get('preferred_start_time', '09:00')),
-                "working_hours_end": doc.get('working_hours_end', doc.get('preferred_end_time', '17:00')),
-                "energy_pattern": doc.get('energy_pattern', 'morning'),
-                "theme": doc.get('theme', 'system'),
+                "working_hours_start": schedule_prefs.get('working_hours_start',
+                    schedule_prefs.get('preferred_start_time',
+                        doc.get('preferred_start_time', '09:00'))),
+                "working_hours_end": schedule_prefs.get('working_hours_end',
+                    schedule_prefs.get('preferred_end_time',
+                        doc.get('preferred_end_time', '17:00'))),
+                "energy_pattern": schedule_prefs.get('energy_pattern',
+                    doc.get('energy_pattern', 'morning')),
+                "theme": schedule_prefs.get('theme', doc.get('theme', 'system')),
                 "notification_preferences": {
-                    "email": notification_prefs.get('email', notification_prefs.get('email_enabled', True)),
-                    "push": notification_prefs.get('push', notification_prefs.get('push_enabled', True)),
+                    "email": notification_prefs.get('email',
+                        notification_prefs.get('email_enabled', True)),
+                    "push": notification_prefs.get('push',
+                        notification_prefs.get('push_enabled', True)),
                     "reminder_minutes": notification_prefs.get('reminder_minutes', 30)
                 }
             }
         return {
-            "working_hours_start": "09:00", "working_hours_end": "17:00", "energy_pattern": "morning", "theme": "system",
+            "working_hours_start": "09:00", "working_hours_end": "17:00",
+            "energy_pattern": "morning", "theme": "system",
             "notification_preferences": {"email": True, "push": True, "reminder_minutes": 30}
         }
     except Exception as e:
@@ -2407,7 +2823,7 @@ async def search_users(query: str, user_id: str = Depends(get_user_id)):
 
 @app.put("/users/preferences")
 async def update_user_preferences(preferences: dict, user_id: str = Depends(get_user_id)):
-    """Update user's preferences"""
+    """Update user's preferences — schedule settings stored inside schedule_preferences JSON"""
     try:
         result = databases.list_documents(
             database_id=DATABASE_ID,
@@ -2416,40 +2832,92 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
         )
         notification_prefs = preferences.get('notification_preferences', {})
         email = preferences.get('email')
-        update_data = {
-            'working_hours_start': preferences.get('working_hours_start', '09:00'),
-            'working_hours_end': preferences.get('working_hours_end', '17:00'),
-            'energy_pattern': preferences.get('energy_pattern', 'morning'),
-            'theme': preferences.get('theme', 'system'),
-            'notification_prefs': json.dumps(notification_prefs),
-            'updated_at': datetime.now().isoformat()
-        }
-        if email:
-            update_data['email'] = email
+        now = datetime.now().isoformat()
+
+        # Build the merged schedule_preferences payload
+        schedule_prefs_update: Dict[str, Any] = {}
+        wh_start = preferences.get('working_hours_start')
+        if wh_start:
+            schedule_prefs_update['working_hours_start'] = wh_start
+        wh_end = preferences.get('working_hours_end')
+        if wh_end:
+            schedule_prefs_update['working_hours_end'] = wh_end
+        ep = preferences.get('energy_pattern')
+        if ep:
+            schedule_prefs_update['energy_pattern'] = ep
+        theme = preferences.get('theme')
+        if theme:
+            schedule_prefs_update['theme'] = theme
+        # Also accept legacy flat keys for backwards compat
+        pst = preferences.get('preferred_start_time')
+        if pst:
+            schedule_prefs_update['preferred_start_time'] = pst
+            if 'working_hours_start' not in schedule_prefs_update:
+                schedule_prefs_update['working_hours_start'] = pst
+        pet = preferences.get('preferred_end_time')
+        if pet:
+            schedule_prefs_update['preferred_end_time'] = pet
+            if 'working_hours_end' not in schedule_prefs_update:
+                schedule_prefs_update['working_hours_end'] = pet
+
         if result.get('documents'):
+            existing_doc = result['documents'][0]
+            existing_schedule_prefs = _parse_json_field(existing_doc.get('schedule_preferences'), {})
+            merged_schedule = {**existing_schedule_prefs, **schedule_prefs_update}
+            update_data: Dict[str, Any] = {
+                'schedule_preferences': json.dumps(merged_schedule),
+                'notification_prefs': json.dumps(notification_prefs),
+                'updated_at': now,
+            }
+            if email:
+                update_data['email'] = email
             databases.update_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id=result['documents'][0]['$id'],
-                data=update_data
+                document_id=existing_doc['$id'],
+                data=update_data,
             )
+            return {
+                "message": "Preferences updated",
+                "working_hours_start": merged_schedule.get('working_hours_start',
+                    merged_schedule.get('preferred_start_time', '09:00')),
+                "working_hours_end": merged_schedule.get('working_hours_end',
+                    merged_schedule.get('preferred_end_time', '17:00')),
+                "energy_pattern": merged_schedule.get('energy_pattern', 'morning'),
+                "theme": merged_schedule.get('theme', 'system'),
+                "notification_preferences": notification_prefs,
+            }
         else:
             if not email:
                 raise HTTPException(status_code=400, detail="Email is required to save preferences")
-            update_data['user_id'] = user_id
-            update_data['created_at'] = datetime.now().isoformat()
+            if not schedule_prefs_update:
+                raise HTTPException(status_code=400, detail="No schedule preferences provided")
+            create_data: Dict[str, Any] = {
+                'user_id': user_id,
+                'email': email,
+                'schedule_preferences': json.dumps(schedule_prefs_update),
+                'notification_prefs': json.dumps(notification_prefs),
+                'created_at': now,
+                'updated_at': now,
+            }
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
                 document_id=ID.unique(),
-                data=update_data
+                data=create_data,
             )
-        return {
-            "message": "Preferences updated", "working_hours_start": update_data['working_hours_start'],
-            "working_hours_end": update_data['working_hours_end'], "energy_pattern": update_data['energy_pattern'],
-            "theme": update_data.get('theme', 'system'),
-            "notification_preferences": notification_prefs
-        }
+            return {
+                "message": "Preferences created",
+                "working_hours_start": schedule_prefs_update.get('working_hours_start',
+                    schedule_prefs_update.get('preferred_start_time', '09:00')),
+                "working_hours_end": schedule_prefs_update.get('working_hours_end',
+                    schedule_prefs_update.get('preferred_end_time', '17:00')),
+                "energy_pattern": schedule_prefs_update.get('energy_pattern', 'morning'),
+                "theme": schedule_prefs_update.get('theme', 'system'),
+                "notification_preferences": notification_prefs,
+            }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

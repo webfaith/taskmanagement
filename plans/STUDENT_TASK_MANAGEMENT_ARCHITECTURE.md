@@ -1079,12 +1079,12 @@ class TaskValidator:
 - [ ] Calendar view components
 - [ ] Sync status indicators
 
-### Phase 5: Group Collaboration
-- [ ] Group management system
-- [ ] Group task assignment
-- [ ] Progress tracking per group
-- [ ] Group notifications
-- [ ] Shared calendar view
+### Phase 5: Group Collaboration ✅
+- [x] Group management system (`/dashboard/groups` — create, edit, delete groups; add/remove members)
+- [x] Group task assignment (`/dashboard/groups` — assign any task to group members with progress tracking)
+- [x] Progress tracking per group (progress bar % per group task, visible in group detail view)
+- [x] Group notifications (task-assignment and group-update notifications via `/notifications`)
+- [x] Shared calendar view (`/dashboard/groups/calendar` — unified calendar of all group task deadlines)
 
 ### Phase 6: Analytics & AI
 - [ ] Productivity tracking service

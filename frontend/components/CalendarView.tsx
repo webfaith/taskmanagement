@@ -51,7 +51,9 @@ export default function CalendarView({
 
     const getTasksForDate = (date: Date) => {
         return tasks.filter((task) => {
-            const taskDate = new Date(task.deadline);
+            const taskDateStr = task.deadline || "";
+            const taskDate = taskDateStr ? (() => { const d = new Date(taskDateStr); return isNaN(d.getTime()) ? null : d; })() : null;
+            if (!taskDate) return false;
             return (
                 taskDate.getFullYear() === date.getFullYear() &&
                 taskDate.getMonth() === date.getMonth() &&
@@ -141,7 +143,10 @@ export default function CalendarView({
                 {daysInMonth.map(({ date, isCurrentMonth }, index) => {
                     const dayTasks = getTasksForDate(date);
                     const hasOverdue = dayTasks.some(
-                        (t) => new Date(t.deadline) < new Date() && t.status !== "completed"
+                        (t) => {
+                            const d = t.deadline ? new Date(t.deadline) : null;
+                            return d && !isNaN(d.getTime()) && d < new Date() && t.status !== "completed";
+                        }
                     );
 
                     return (
@@ -240,13 +245,13 @@ export default function CalendarView({
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                        <span>
-                                            ⏰{" "}
-                                            {new Date(task.deadline).toLocaleTimeString("en-US", {
-                                                hour: "numeric",
-                                                minute: "2-digit",
-                                            })}
-                                        </span>
+                                            <span>
+                                                ⏰{" "}
+                                                {task.deadline ? (() => { const d = new Date(task.deadline); return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString("en-US", {
+                                                    hour: "numeric",
+                                                    minute: "2-digit",
+                                                }); })() : '—'}
+                                            </span>
                                         <span>•</span>
                                         <span>{task.estimated_hours}h</span>
                                         <span>•</span>

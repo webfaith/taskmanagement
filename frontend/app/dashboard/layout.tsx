@@ -38,7 +38,8 @@ export default function DashboardLayout({
         { name: "Dashboard", href: "/dashboard", icon: "📊" },
         { name: "Tasks", href: "/dashboard/tasks", icon: "📋" },
         { name: "Groups", href: "/dashboard/groups", icon: "👥" },
-        { name: "Calendar", href: "/dashboard/calendar", icon: "📅" },
+        { name: "Groups Calendar", href: "/dashboard/groups/calendar", icon: "📅" },
+        { name: "Calendar", href: "/dashboard/calendar", icon: "🗓️" },
         { name: "Schedule", href: "/dashboard/schedule", icon: "⚡" },
         { name: "Analytics", href: "/dashboard/analytics", icon: "📈" },
     ];

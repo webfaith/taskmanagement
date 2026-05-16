@@ -19,8 +19,8 @@ export default function UrgencyList({ tasks, onUpdate, onDelete, limit = 5 }: Ur
         const scored = tasks
             .filter((task) => task.status !== "completed")
             .map((task) => {
-                const deadline = new Date(task.deadline);
-                const hoursUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+                const deadlineVal = task.deadline ? (() => { const d = new Date(task.deadline); return isNaN(d.getTime()) ? null : d; })() : null;
+                const hoursUntilDeadline = deadlineVal ? (deadlineVal.getTime() - now.getTime()) / (1000 * 60 * 60) : Infinity;
                 const daysUntilDeadline = hoursUntilDeadline / 24;
 
                 // Higher priority (lower number) = higher urgency score
@@ -98,6 +98,21 @@ export default function UrgencyList({ tasks, onUpdate, onDelete, limit = 5 }: Ur
                             {hoursUntilDeadline <= 0 && (
                                 <span className="text-red-500 font-medium flex items-center gap-1">
                                     ⚠️ Overdue
+                                </span>
+                            )}
+                            {hoursUntilDeadline > 0 && hoursUntilDeadline <= 6 && (
+                                <span className="text-orange-500 font-medium flex items-center gap-1">
+                                    🔥 Due in {Math.round(hoursUntilDeadline)} hours
+                                </span>
+                            )}
+                            {hoursUntilDeadline > 6 && hoursUntilDeadline <= 24 && (
+                                <span className="text-yellow-600 dark:text-yellow-400 flex items-center gap-1">
+                                    ⏰ Due in {Math.round(hoursUntilDeadline)} hours
+                                </span>
+                            )}
+                            {hoursUntilDeadline > 24 && hoursUntilDeadline !== Infinity && (
+                                <span className="text-blue-500 flex items-center gap-2">
+                                    📅 Due in {Math.round(hoursUntilDeadline / 24)} days
                                 </span>
                             )}
                             {hoursUntilDeadline > 0 && hoursUntilDeadline <= 6 && (
