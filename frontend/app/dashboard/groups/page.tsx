@@ -14,11 +14,12 @@ export default function GroupsPage() {
     const [selectedGroupId, setSelectedGroupId] = useState<string>("");
     const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
     const [groupTasks, setGroupTasks] = useState<GroupTask[]>([]);
+    const [memberDirectory, setMemberDirectory] = useState<Record<string, { email: string; display_name?: string | null }>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [creating, setCreating] = useState(false);
     const [newGroup, setNewGroup] = useState({ name: "", description: "", memberIds: "" });
-    const [newMemberId, setNewMemberId] = useState("");
+    const [newMemberEmail, setNewMemberEmail] = useState("");
     const [taskId, setTaskId] = useState("");
     const [assignedTo, setAssignedTo] = useState("");
 
@@ -38,6 +39,22 @@ export default function GroupsPage() {
     const titleByTaskId = useMemo(() => {
         return new Map(tasks.map((task) => [task.id, task.title]));
     }, [tasks]);
+
+    const resolveUserIds = async (entries: string[]) => {
+        const resolved: string[] = [];
+        for (const entry of entries) {
+            const value = entry.trim();
+            if (!value) continue;
+            try {
+                const matches = await apiClient.searchUsers(value);
+                const first = matches[0];
+                resolved.push(first?.user_id || value);
+            } catch {
+                resolved.push(value);
+            }
+        }
+        return Array.from(new Set(resolved));
+    };
 
     const loadData = async () => {
         try {
@@ -63,6 +80,20 @@ export default function GroupsPage() {
             const data = await apiClient.getGroup(groupId);
             setSelectedGroup(data.group);
             setGroupTasks(data.tasks);
+            const ids = Array.from(new Set([data.group.owner_id, ...data.group.member_ids]));
+            const directoryEntries = await Promise.all(
+                ids.map(async (id) => {
+                    try {
+                        const matches = await apiClient.searchUsers(id);
+                        const match = matches[0];
+                        return match ? [id, { email: match.email, display_name: match.display_name }] : null;
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+            const directory = Object.fromEntries(directoryEntries.filter(Boolean) as [string, { email: string; display_name?: string | null }][]);
+            setMemberDirectory(directory);
         } catch (err) {
             console.error("Failed to load group details:", err);
         }
@@ -72,10 +103,10 @@ export default function GroupsPage() {
         if (!newGroup.name.trim()) return;
         try {
             setCreating(true);
-            const member_ids = newGroup.memberIds
+            const member_ids = await resolveUserIds(newGroup.memberIds
                 .split(",")
                 .map((member) => member.trim())
-                .filter(Boolean);
+                .filter(Boolean));
             const created = await apiClient.createGroup({
                 name: newGroup.name.trim(),
                 description: newGroup.description.trim() || undefined,
@@ -93,11 +124,12 @@ export default function GroupsPage() {
     };
 
     const handleAddMember = async () => {
-        if (!selectedGroupId || !newMemberId.trim()) return;
+        if (!selectedGroupId || !newMemberEmail.trim()) return;
         try {
             setSaving(true);
-            await apiClient.addGroupMember(selectedGroupId, newMemberId.trim());
-            setNewMemberId("");
+            const resolved = await resolveUserIds([newMemberEmail.trim()]);
+            await apiClient.addGroupMember(selectedGroupId, resolved[0] || newMemberEmail.trim());
+            setNewMemberEmail("");
             await loadSelectedGroup(selectedGroupId);
             await loadData();
         } catch (err) {
@@ -125,10 +157,10 @@ export default function GroupsPage() {
         if (!selectedGroupId || !taskId.trim()) return;
         try {
             setSaving(true);
-            const assigned = assignedTo
+            const assigned = await resolveUserIds(assignedTo
                 .split(",")
                 .map((member) => member.trim())
-                .filter(Boolean);
+                .filter(Boolean));
             await apiClient.addGroupTask(selectedGroupId, taskId.trim(), assigned, {}, 0);
             setTaskId("");
             setAssignedTo("");
@@ -187,7 +219,7 @@ export default function GroupsPage() {
                                 <input
                                     value={newGroup.memberIds}
                                     onChange={(e) => setNewGroup({ ...newGroup, memberIds: e.target.value })}
-                                    placeholder="Member IDs, comma separated"
+                                    placeholder="Member emails or IDs, comma separated"
                                     className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
                                 <button
@@ -245,9 +277,11 @@ export default function GroupsPage() {
                                                 {selectedGroup.description || "No description provided"}
                                             </p>
                                         </div>
-                                        <div className="text-right">
+                                    <div className="text-right">
                                             <p className="text-sm text-gray-500 dark:text-gray-400">Owner</p>
-                                            <p className="text-sm font-medium text-gray-900 dark:text-white">{selectedGroup.owner_id}</p>
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                {memberDirectory[selectedGroup.owner_id]?.email || selectedGroup.owner_id}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -261,7 +295,9 @@ export default function GroupsPage() {
                                             ) : (
                                                 selectedGroup.member_ids.map((memberId) => (
                                                     <div key={memberId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-                                                        <span className="text-sm text-gray-900 dark:text-white truncate">{memberId}</span>
+                                                        <span className="text-sm text-gray-900 dark:text-white truncate">
+                                                            {memberDirectory[memberId]?.email || memberId}
+                                                        </span>
                                                         {memberId !== selectedGroup.owner_id && (
                                                             <button
                                                                 onClick={() => handleRemoveMember(memberId)}
@@ -276,9 +312,9 @@ export default function GroupsPage() {
                                         </div>
                                         <div className="flex gap-2">
                                             <input
-                                                value={newMemberId}
-                                                onChange={(e) => setNewMemberId(e.target.value)}
-                                                placeholder="Add member user ID"
+                                                value={newMemberEmail}
+                                                onChange={(e) => setNewMemberEmail(e.target.value)}
+                                                placeholder="Add member by email or ID"
                                                 className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                             />
                                             <button
@@ -309,7 +345,7 @@ export default function GroupsPage() {
                                             <input
                                                 value={assignedTo}
                                                 onChange={(e) => setAssignedTo(e.target.value)}
-                                                placeholder="Assigned user IDs, comma separated"
+                                                placeholder="Assigned emails or IDs, comma separated"
                                                 className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                             />
                                             <button

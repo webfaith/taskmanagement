@@ -2371,6 +2371,40 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/users/search")
+async def search_users(query: str, user_id: str = Depends(get_user_id)):
+    """Search user profiles by email or user ID."""
+    try:
+        results = []
+        seen_ids = set()
+
+        for search_query in [
+            Query.equal("email", query),
+            Query.equal("user_id", query),
+        ]:
+            result = databases.list_documents(
+                database_id=DATABASE_ID,
+                collection_id=USERS_COLLECTION,
+                queries=[search_query]
+            )
+            for doc in result.get("documents", []):
+                doc_id = doc.get("$id")
+                if doc_id in seen_ids:
+                    continue
+                seen_ids.add(doc_id)
+                results.append({
+                    "id": doc_id,
+                    "user_id": doc.get("user_id"),
+                    "email": doc.get("email"),
+                    "display_name": doc.get("display_name") or doc.get("name"),
+                    "timezone": doc.get("timezone", "UTC"),
+                })
+
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.put("/users/preferences")
 async def update_user_preferences(preferences: dict, user_id: str = Depends(get_user_id)):
     """Update user's preferences"""

@@ -230,6 +230,11 @@ class ApiClient {
         return this.request<string[]>('/evaluation/insights');
     }
 
+    async searchUsers(query: string): Promise<{ id: string; user_id: string; email: string; display_name?: string | null; timezone?: string }[]> {
+        const params = new URLSearchParams({ query });
+        return this.request<{ id: string; user_id: string; email: string; display_name?: string | null; timezone?: string }[]>(`/users/search?${params.toString()}`);
+    }
+
     // Group collaboration
     async getGroups(): Promise<Group[]> {
         return this.request<Group[]>('/groups');
