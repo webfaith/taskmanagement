@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from appwrite.client import Client
 from appwrite.services.databases import Databases
 from appwrite.query import Query
+from appwrite.id import ID
 
 # Load environment variables from the same directory as this file
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -380,7 +381,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document
         )
 
@@ -407,7 +408,7 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=NOTIFICATIONS_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data=notification_data
             )
         except Exception:
@@ -719,7 +720,7 @@ async def set_schedule_preferences(prefs: SchedulePreferences, user_id: str = De
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data=prefs_data
             )
         
@@ -766,7 +767,7 @@ async def add_free_slots(date: str, slots: List[FreeSlot], user_id: str = Depend
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=SCHEDULES_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data={
                     'user_id': user_id,
                     'date': date,
@@ -820,7 +821,7 @@ async def add_commitments(date: str, commitments: List[Commitment], user_id: str
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=SCHEDULES_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data={
                     'user_id': user_id,
                     'date': date,
@@ -1079,7 +1080,10 @@ async def get_recommendations(date: str, user_id: str = Depends(get_user_id)):
         schedule_result = databases.list_documents(
             database_id=DATABASE_ID,
             collection_id=SCHEDULES_COLLECTION,
-            document_id='unique()'  # This won't work, need different approach
+            queries=[
+                Query.equal('user_id', user_id),
+                Query.equal('date', date)
+            ]
         )
         
         return {
@@ -1261,7 +1265,7 @@ async def generate_reminders(user_id: str = Depends(get_user_id)):
                 databases.create_document(
                     database_id=DATABASE_ID,
                     collection_id=NOTIFICATIONS_COLLECTION,
-                    document_id='unique()',
+                    document_id=ID.unique(),
                     data=notif_data
                 )
                 reminders_created += 1
@@ -1341,7 +1345,7 @@ async def submit_feedback(
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=FEEDBACK_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document_data
         )
         
@@ -1367,7 +1371,7 @@ async def log_metric(
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=EVALUATION_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document_data
         )
         
@@ -1392,7 +1396,7 @@ async def submit_survey(
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=SURVEY_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document_data
         )
         
@@ -1575,7 +1579,7 @@ async def submit_daily_checkin(
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=EVALUATION_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document_data
         )
         
@@ -1742,7 +1746,7 @@ async def submit_success_story(
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=STORIES_COLLECTION,
-            document_id='unique()',
+            document_id=ID.unique(),
             data=document_data
         )
         
@@ -1906,7 +1910,7 @@ async def set_notification_preferences(prefs: NotificationPreferences, user_id: 
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data=update_data
             )
         return {"message": "Notification preferences updated", "preferences": prefs_dict}
@@ -1967,7 +1971,7 @@ async def update_working_hours(hours: dict, user_id: str = Depends(get_user_id))
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data=update_data
             )
         return {"message": "Working hours updated", **update_data}
@@ -2183,7 +2187,7 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
             databases.create_document(
                 database_id=DATABASE_ID,
                 collection_id=USERS_COLLECTION,
-                document_id='unique()',
+                document_id=ID.unique(),
                 data=update_data
             )
         return {
