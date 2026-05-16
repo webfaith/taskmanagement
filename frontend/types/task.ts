@@ -59,6 +59,7 @@ export interface UserPreferences {
     working_hours_start: string;
     working_hours_end: string;
     energy_pattern: 'morning' | 'afternoon' | 'evening' | 'split';
+    theme?: 'light' | 'dark' | 'system';
     notification_preferences: {
         email: boolean;
         push: boolean;

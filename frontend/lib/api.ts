@@ -172,7 +172,7 @@ class ApiClient {
         return this.request<UserPreferences>('/users/preferences');
     }
 
-    async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
+    async updateUserPreferences(preferences: Partial<UserPreferences> & { email?: string }): Promise<UserPreferences> {
         return this.request<UserPreferences>('/users/preferences', {
             method: 'PUT',
             body: JSON.stringify(preferences),

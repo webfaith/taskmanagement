@@ -2143,6 +2143,7 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
                 "working_hours_start": doc.get('working_hours_start', doc.get('preferred_start_time', '09:00')),
                 "working_hours_end": doc.get('working_hours_end', doc.get('preferred_end_time', '17:00')),
                 "energy_pattern": doc.get('energy_pattern', 'morning'),
+                "theme": doc.get('theme', 'system'),
                 "notification_preferences": {
                     "email": notification_prefs.get('email', notification_prefs.get('email_enabled', True)),
                     "push": notification_prefs.get('push', notification_prefs.get('push_enabled', True)),
@@ -2150,7 +2151,7 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
                 }
             }
         return {
-            "working_hours_start": "09:00", "working_hours_end": "17:00", "energy_pattern": "morning",
+            "working_hours_start": "09:00", "working_hours_end": "17:00", "energy_pattern": "morning", "theme": "system",
             "notification_preferences": {"email": True, "push": True, "reminder_minutes": 30}
         }
     except Exception as e:
@@ -2167,13 +2168,17 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
             queries=[Query.equal('user_id', user_id)]
         )
         notification_prefs = preferences.get('notification_preferences', {})
+        email = preferences.get('email')
         update_data = {
             'working_hours_start': preferences.get('working_hours_start', '09:00'),
             'working_hours_end': preferences.get('working_hours_end', '17:00'),
             'energy_pattern': preferences.get('energy_pattern', 'morning'),
+            'theme': preferences.get('theme', 'system'),
             'notification_prefs': json.dumps(notification_prefs),
             'updated_at': datetime.now().isoformat()
         }
+        if email:
+            update_data['email'] = email
         if result.get('documents'):
             databases.update_document(
                 database_id=DATABASE_ID,
@@ -2182,6 +2187,8 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
                 data=update_data
             )
         else:
+            if not email:
+                raise HTTPException(status_code=400, detail="Email is required to save preferences")
             update_data['user_id'] = user_id
             update_data['created_at'] = datetime.now().isoformat()
             databases.create_document(
@@ -2193,6 +2200,7 @@ async def update_user_preferences(preferences: dict, user_id: str = Depends(get_
         return {
             "message": "Preferences updated", "working_hours_start": update_data['working_hours_start'],
             "working_hours_end": update_data['working_hours_end'], "energy_pattern": update_data['energy_pattern'],
+            "theme": update_data.get('theme', 'system'),
             "notification_preferences": notification_prefs
         }
     except Exception as e:

@@ -43,6 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUserId(currentUser.$id);
             if (typeof window !== 'undefined') {
                 localStorage.setItem('user_id', currentUser.$id);
+                localStorage.setItem('user_email', currentUser.email);
             }
             // Initialize API client with user info
             apiClient.setUserId(currentUser.$id);
@@ -83,6 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUserId(currentUser.$id);
             if (typeof window !== 'undefined') {
                 localStorage.setItem('user_id', currentUser.$id);
+                localStorage.setItem('user_email', currentUser.email);
             }
             // Initialize API client with user info
             apiClient.setUserId(currentUser.$id);
@@ -148,6 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('user_id');
                 localStorage.removeItem('auth_token');
+                localStorage.removeItem('user_email');
             }
             router.push("/login");
             return;
@@ -160,6 +163,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('user_id');
                 localStorage.removeItem('auth_token');
+                localStorage.removeItem('user_email');
             }
             router.push("/login");
         } catch (error) {

@@ -6,9 +6,11 @@ import apiClient from "@/lib/api";
 import { UserPreferences } from "@/types/task";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function ProfilePage() {
     const { user, logout } = useAuth();
+    const { theme, setTheme } = useTheme();
     const [preferences, setPreferences] = useState<UserPreferences | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -25,6 +27,9 @@ export default function ProfilePage() {
             setLoading(true);
             const data = await apiClient.getUserPreferences();
             setPreferences(data);
+            if (data.theme) {
+                setTheme(data.theme);
+            }
         } catch (err: any) {
             console.error("Failed to fetch preferences:", err);
             // Set default preferences
@@ -32,6 +37,7 @@ export default function ProfilePage() {
                 working_hours_start: "09:00",
                 working_hours_end: "17:00",
                 energy_pattern: "morning",
+                theme: "system",
                 notification_preferences: {
                     email: true,
                     push: true,
@@ -47,7 +53,11 @@ export default function ProfilePage() {
         if (!preferences) return;
         try {
             setSaving(true);
-            await apiClient.updateUserPreferences(preferences);
+            await apiClient.updateUserPreferences({
+                ...preferences,
+                email: user?.email,
+                theme,
+            });
         } catch (err: any) {
             console.error("Failed to save preferences:", err);
         } finally {
@@ -209,15 +219,36 @@ export default function ProfilePage() {
                                 Theme
                             </label>
                             <div className="flex gap-3">
-                                <button className="flex-1 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white hover:bg-gray-50 transition">
+                                <button
+                                    onClick={() => setTheme("light")}
+                                    className={`flex-1 p-4 rounded-lg border transition ${
+                                        theme === "light"
+                                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                                            : "border-gray-300 dark:border-gray-600 bg-white hover:bg-gray-50 dark:bg-gray-800"
+                                    }`}
+                                >
                                     <span className="text-2xl">☀️</span>
                                     <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">Light</p>
                                 </button>
-                                <button className="flex-1 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-900 hover:bg-gray-800 transition">
+                                <button
+                                    onClick={() => setTheme("dark")}
+                                    className={`flex-1 p-4 rounded-lg border transition ${
+                                        theme === "dark"
+                                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                                            : "border-gray-300 dark:border-gray-600 bg-gray-900 hover:bg-gray-800"
+                                    }`}
+                                >
                                     <span className="text-2xl">🌙</span>
                                     <p className="text-sm font-medium text-white mt-1">Dark</p>
                                 </button>
-                                <button className="flex-1 p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-gradient-to-r from-gray-100 to-gray-900 hover:from-gray-200 hover:to-gray-800 transition">
+                                <button
+                                    onClick={() => setTheme("system")}
+                                    className={`flex-1 p-4 rounded-lg border transition ${
+                                        theme === "system"
+                                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                                            : "border-gray-300 dark:border-gray-600 bg-gradient-to-r from-gray-100 to-gray-900 hover:from-gray-200 hover:to-gray-800"
+                                    }`}
+                                >
                                     <span className="text-2xl">💻</span>
                                     <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">System</p>
                                 </button>
