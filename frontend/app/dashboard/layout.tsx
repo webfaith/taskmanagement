@@ -51,6 +51,11 @@ export default function DashboardLayout({
 
     const isEvaluationActive = pathname.startsWith('/dashboard/evaluation');
     const isMobileEvaluationActive = evaluationItems.some(item => pathname === item.href);
+    const mobileNavItems = [
+        ...navItems,
+        { name: "Evaluation", href: "/dashboard/evaluation", icon: "🎯" },
+        { name: "Profile", href: "/dashboard/profile", icon: "👤" },
+    ];
 
     return (
         <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -151,7 +156,7 @@ export default function DashboardLayout({
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto p-4 md:p-8">
+            <main className="flex-1 overflow-y-auto p-4 pb-28 md:p-8 md:pb-8">
                 {/* Mobile Header */}
                 <div className="md:hidden flex justify-between items-center mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
                     <h1 className="text-lg font-bold">📋 TaskFlow</h1>
@@ -160,8 +165,8 @@ export default function DashboardLayout({
 
                 {/* Mobile Navigation */}
                 <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-2 z-50">
-                    <div className="flex justify-around">
-                        {navItems.slice(0, 4).map((item) => {
+                    <div className="flex flex-wrap justify-around gap-1">
+                        {mobileNavItems.map((item) => {
                             const isActive = pathname === item.href;
                             return (
                                 <Link
@@ -177,17 +182,6 @@ export default function DashboardLayout({
                                 </Link>
                             );
                         })}
-                        {/* Mobile Evaluation Link */}
-                        <Link
-                            href="/dashboard/evaluation"
-                            className={`flex flex-col items-center px-3 py-2 rounded-lg ${isMobileEvaluationActive
-                                ? "text-blue-600 dark:text-blue-400"
-                                : "text-gray-500 dark:text-gray-400"
-                                }`}
-                        >
-                            <span className="text-xl">🎯</span>
-                            <span className="text-xs mt-1">Evaluation</span>
-                        </Link>
                     </div>
                 </div>
 
