@@ -243,7 +243,7 @@ export default function ResearchExportPage() {
                         </div>
                     ) : (
                         <div className="text-center py-12 text-gray-400">
-                            <p>Click "Refresh Preview" to see a sample of your data</p>
+                            <p>Click &quot;Refresh Preview&quot; to see a sample of your data</p>
                         </div>
                     )}
                 </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 import { ProductivityStats, TaskCategory, TaskPriority } from "@/types/task";
 import ProductivityChart from "@/components/ProductivityChart";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -31,8 +32,8 @@ export default function AnalyticsPage() {
             setLoading(true);
             const data = await apiClient.getProductivityStats();
             setStats(data);
-        } catch (err: any) {
-            console.error("Failed to fetch stats:", err);
+        } catch (err: unknown) {
+            console.error("Failed to fetch stats:", getErrorMessage(err));
             // Generate mock stats for demo
             setStats({
                 total_tasks: 45,
@@ -181,7 +182,7 @@ export default function AnalyticsPage() {
                         <div className="flex items-center gap-4">
                             <select
                                 value={timeRange}
-                                onChange={(e) => setTimeRange(e.target.value as any)}
+                                onChange={(e: ChangeEvent<HTMLSelectElement>) => setTimeRange(e.target.value as "week" | "month" | "year")}
                                 className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                             >
                                 <option value="week">Last 7 Days</option>

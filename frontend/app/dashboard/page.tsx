@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 import { Task, ProductivityStats } from "@/types/task";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import TaskList from "@/components/TaskList";
@@ -40,8 +41,8 @@ export default function DashboardPage() {
             setTasks(tasksData);
             setStats(statsData);
             setWeeklyData(weeklyDataResponse);
-        } catch (err: any) {
-            console.error(err);
+        } catch (err: unknown) {
+            console.error(getErrorMessage(err));
             setError("Failed to load some data. Showing cached tasks if available.");
         } finally {
             setLoading(false);

@@ -7,7 +7,6 @@ import {
     getEffectivenessReport,
     getProductivityTrend,
     getBalanceScore,
-    getStressTrend,
     getCompletionRateTrend,
     getAIInsights,
     getQuickStats,
@@ -16,14 +15,12 @@ import {
     EffectivenessReport,
     ProductivityTrend,
     BalanceScore,
-    DailyCheckIn
 } from '@/types/evaluation';
 
 export default function EvaluationDashboardPage() {
     const [report, setReport] = useState<EffectivenessReport | null>(null);
     const [productivityTrend, setProductivityTrend] = useState<ProductivityTrend[]>([]);
     const [balance, setBalance] = useState<BalanceScore | null>(null);
-    const [stressTrend, setStressTrend] = useState<ProductivityTrend[]>([]);
     const [completionTrend, setCompletionTrend] = useState<ProductivityTrend[]>([]);
     const [insights, setInsights] = useState<string[]>([]);
     const [stats, setStats] = useState<{
@@ -40,11 +37,10 @@ export default function EvaluationDashboardPage() {
 
     const loadData = async () => {
         try {
-            const [reportData, productivity, balanceData, stress, completion, insightsData, statsData] = await Promise.all([
+            const [reportData, productivity, balanceData, completion, insightsData, statsData] = await Promise.all([
                 getEffectivenessReport('weekly'),
                 getProductivityTrend(7),
                 getBalanceScore(),
-                getStressTrend(7),
                 getCompletionRateTrend(7),
                 getAIInsights(),
                 getQuickStats(),
@@ -52,7 +48,6 @@ export default function EvaluationDashboardPage() {
             setReport(reportData);
             setProductivityTrend(productivity);
             setBalance(balanceData);
-            setStressTrend(stress);
             setCompletionTrend(completion);
             setInsights(insightsData);
             setStats(statsData);

@@ -31,6 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const checkUserStatus = async () => {
         if (!isAppwriteConfigured) {
+            console.warn("[AuthContext] Appwrite not configured - using demo mode");
             setUser(null);
             setUserId(null);
             setLoading(false);
@@ -38,7 +39,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Checking user status...");
             const currentUser = await account.get();
+            console.log("[AuthContext] User found:", currentUser.$id);
             setUser(currentUser);
             setUserId(currentUser.$id);
             if (typeof window !== 'undefined') {
@@ -56,9 +59,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     localStorage.setItem('auth_token', session.jwt);
                 }
             } catch (jwtError) {
-                console.warn("Could not generate JWT:", jwtError);
+                console.warn("[AuthContext] Could not generate JWT:", jwtError);
             }
-        } catch (error) {
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Error checking user status:", errorMsg);
+            
+            // Check if this is an Appwrite permission error
+            if (errorMsg.includes("missing scopes") || errorMsg.includes("unauthorized")) {
+                console.warn("[AuthContext] Appwrite permission error - user is not logged in");
+            }
+            
             setUser(null);
             setUserId(null);
         } finally {
@@ -72,13 +83,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Attempting login for:", email);
+            
             // Logout any existing session before creating a new one
             try {
                 await account.deleteSession("current");
             } catch {
                 // No active session to delete
             }
+            
+            console.log("[AuthContext] Creating email/password session...");
             await account.createEmailPasswordSession(email, password);
+            
+            console.log("[AuthContext] Fetching user data...");
             const currentUser = await account.get();
             setUser(currentUser);
             setUserId(currentUser.$id);
@@ -86,19 +103,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 localStorage.setItem('user_id', currentUser.$id);
                 localStorage.setItem('user_email', currentUser.email);
             }
+            
             // Initialize API client with user info
             apiClient.setUserId(currentUser.$id);
             
             // Generate JWT
-            const session = await account.createJWT();
-            apiClient.setToken(session.jwt);
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('auth_token', session.jwt);
+            try {
+                console.log("[AuthContext] Generating JWT...");
+                const session = await account.createJWT();
+                apiClient.setToken(session.jwt);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('auth_token', session.jwt);
+                }
+            } catch (jwtError) {
+                console.warn("[AuthContext] Could not generate JWT:", jwtError);
             }
             
+            console.log("[AuthContext] Login successful, redirecting to dashboard...");
             router.push("/dashboard");
-        } catch (error) {
-            console.error(error);
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Login error:", errorMsg);
             throw error;
         }
     };
@@ -109,10 +134,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Creating user account for:", email);
             await account.create(ID.unique(), email, password, name);
+            console.log("[AuthContext] Account created, attempting login...");
             await login(email, password);
-        } catch (error) {
-            console.error(error);
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Registration error:", errorMsg);
             throw error;
         }
     };
@@ -123,9 +151,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Requesting password reset for:", email);
             await account.createRecovery(email, redirectUrl);
-        } catch (error) {
-            console.error(error);
+            console.log("[AuthContext] Password reset email sent");
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Password reset error:", errorMsg);
             throw error;
         }
     };
@@ -136,9 +167,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Completing password reset for user:", userId);
             await account.updateRecovery(userId, secret, password);
-        } catch (error) {
-            console.error(error);
+            console.log("[AuthContext] Password reset completed");
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Complete password reset error:", errorMsg);
             throw error;
         }
     };
@@ -157,6 +191,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
+            console.log("[AuthContext] Logging out user...");
             await account.deleteSession("current");
             setUser(null);
             setUserId(null);
@@ -165,9 +200,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 localStorage.removeItem('auth_token');
                 localStorage.removeItem('user_email');
             }
+            console.log("[AuthContext] Logout successful");
             router.push("/login");
-        } catch (error) {
-            console.error(error);
+        } catch (error: unknown) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error("[AuthContext] Logout error:", errorMsg);
         }
     };
 

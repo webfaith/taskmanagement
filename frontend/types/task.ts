@@ -78,6 +78,14 @@ export interface GroupTask {
     updated_at?: string;
 }
 
+export interface GroupMessage {
+    id: string;
+    group_id: string;
+    sender_id: string;
+    message: string;
+    created_at: string;
+}
+
 export interface UserPreferences {
     working_hours_start: string;
     working_hours_end: string;

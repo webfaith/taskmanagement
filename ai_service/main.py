@@ -16,6 +16,7 @@ import json
 import os
 from uuid import uuid4
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 APPWRITE_AVAILABLE = True
 try:
@@ -444,20 +445,47 @@ class DatabasesWrapper:
             raise AttributeError(f"'{type(self.service).__name__}' object has no attribute '{mapped_name}'")
 
         if callable(attr):
+            import inspect as _inspect
+            _sig = _inspect.signature(attr)
+
             def wrapper(*args, **kwargs):
-                if 'database_id' in kwargs:
-                    kwargs.pop('database_id')
                 if 'collection_id' in kwargs:
                     kwargs['table_id'] = kwargs.pop('collection_id')
                 if 'document_id' in kwargs:
                     kwargs['row_id'] = kwargs.pop('document_id')
 
+                if 'database_id' in kwargs and ('database_id' not in _sig.parameters or not APPWRITE_AVAILABLE):
+                    kwargs.pop('database_id')
+                if APPWRITE_AVAILABLE and 'database_id' in _sig.parameters and 'database_id' not in kwargs:
+                    kwargs['database_id'] = DATABASE_ID
+
                 result = attr(*args, **kwargs)
-                if hasattr(result, 'to_dict'):
-                    return result.to_dict()
+
+                if hasattr(result, 'rows'):
+                    d = {'total': getattr(result, 'total', 0), 'documents': []}
+                    for row in getattr(result, 'rows', []):
+                        row_dict = row.to_dict() if hasattr(row, 'to_dict') else row.model_dump()
+                        if 'data' in row_dict and isinstance(row_dict['data'], dict):
+                            row_dict.update(row_dict.pop('data'))
+                        d['documents'].append(row_dict)
+                    return d
+                elif hasattr(result, 'documents'):
+                    d = {'total': getattr(result, 'total', 0), 'documents': []}
+                    for doc in getattr(result, 'documents', []):
+                        doc_dict = doc.to_dict() if hasattr(doc, 'to_dict') else doc.model_dump()
+                        if 'data' in doc_dict and isinstance(doc_dict['data'], dict):
+                            doc_dict.update(doc_dict.pop('data'))
+                        d['documents'].append(doc_dict)
+                    return d
+                elif hasattr(result, 'to_dict'):
+                    d = result.to_dict()
+                    if 'data' in d and isinstance(d['data'], dict):
+                        d.update(d.pop('data'))
+                    return d
                 return result
 
             return wrapper
+        return attr
         return attr
 
 
@@ -485,6 +513,10 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', '')
 GOOGLE_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 @app.middleware("http")
@@ -640,6 +672,10 @@ class GroupTaskCreate(BaseModel):
     assigned_to: List[str] = []
     milestone: Dict[str, Any] = {}
     progress: float = 0.0
+
+
+class GroupMessageCreate(BaseModel):
+    message: str
 
 
 class GoogleCalendarCallback(BaseModel):
@@ -922,17 +958,21 @@ def document_to_task(doc: Dict) -> Dict:
         except:
             pass
 
+    priority_val = doc.get('priority')
+    if priority_val is None:
+        priority_val = 3
+
     return {
         'id': doc.get('$id', ''),
-        'title': doc.get('title', ''),
+        'title': doc.get('title') or '',
         'description': doc.get('description'),
-        'category': doc.get('category', ''),
-        'priority': int(doc.get('priority', 3)),
+        'category': doc.get('category') or '',
+        'priority': int(priority_val),
         'deadline': deadline_val,
-        'estimated_hours': doc.get('estimated_hours', 0),
+        'estimated_hours': doc.get('estimated_hours') or 0,
         'actual_hours': doc.get('actual_hours'),
-        'energy_level': doc.get('energy_level', 'medium'),
-        'status': doc.get('status', 'todo'),
+        'energy_level': doc.get('energy_level') or 'medium',
+        'status': doc.get('status') or 'todo',
         'scheduled_start': doc.get('scheduled_start'),
         'scheduled_end': doc.get('scheduled_end'),
         'completed_at': doc.get('completed_at'),
@@ -976,12 +1016,23 @@ async def create_task(task: TaskCreate, user_id: str = Depends(get_user_id)):
     }
 
     try:
+        # DEBUG: show payload being written to DB
+        try:
+            print("DEBUG create_document payload:", json.dumps(document, default=str))
+        except Exception:
+            print("DEBUG create_document payload: <unserializable>")
+
         result = databases.create_document(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
             document_id=ID.unique(),
             data=document
         )
+        # DEBUG: show raw result from DB
+        try:
+            print("DEBUG create_document result:", result)
+        except Exception:
+            print("DEBUG create_document result: <unprintable>")
 
         # Determine notification type based on urgency
         hours_left = (make_naive(task.deadline) - datetime.now()).total_seconds() / 3600
@@ -1226,6 +1277,14 @@ async def update_task_status(
         if existing.get('user_id') != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
+        # Hydrate missing required fields to bypass Appwrite schema validation
+        if 'priority' not in update_data and existing.get('priority') is None:
+            update_data['priority'] = 3
+        if 'category' not in update_data and not existing.get('category'):
+            update_data['category'] = 'personal'
+        if 'estimated_hours' not in update_data and existing.get('estimated_hours') is None:
+            update_data['estimated_hours'] = 1.0
+
         result = databases.update_document(
             database_id=DATABASE_ID,
             collection_id=TASKS_COLLECTION,
@@ -1509,16 +1568,24 @@ async def optimize_schedule(date: str, user_id: str = Depends(get_user_id)):
             allocated = allocate_task_to_slot(task, free_slots, target_date)
             if allocated:
                 optimized_schedule.append(allocated)
-                # Update task in database
+                # Update task in database, hydrating missing required fields
+                update_payload = {
+                    'scheduled_start': allocated['scheduled_start'],
+                    'scheduled_end': allocated['scheduled_end'],
+                    'updated_at': datetime.now().isoformat()
+                }
+                if task.get('priority') is None:
+                    update_payload['priority'] = 3
+                if not task.get('category'):
+                    update_payload['category'] = 'personal'
+                if task.get('estimated_hours') is None:
+                    update_payload['estimated_hours'] = 1.0
+
                 databases.update_document(
                     database_id=DATABASE_ID,
                     collection_id=TASKS_COLLECTION,
                     document_id=task['id'],
-                    data={
-                        'scheduled_start': allocated['scheduled_start'],
-                        'scheduled_end': allocated['scheduled_end'],
-                        'updated_at': datetime.now().isoformat()
-                    }
+                    data=update_payload
                 )
         
         return {
@@ -1992,11 +2059,28 @@ async def submit_survey(
 ):
     """Submit survey responses"""
     try:
+        print(f"[SURVEY] Submitting survey for user_id={user_id}")
+        print(f"[SURVEY] Answers received: {survey.answers}")
+        
+        # Validate answers
+        if not survey.answers:
+            print("[SURVEY] ERROR: No answers provided")
+            raise ValueError("Survey answers cannot be empty")
+        
+        # Prepare document data
         document_data = {
             'user_id': user_id,
             'answers': json.dumps(survey.answers),
-            'completed_at': datetime.now().isoformat()
+            'completed_at': datetime.now().isoformat(),
+            'category': 'weekly',
+            'score': 0
         }
+        print(f"[SURVEY] Document data prepared: {list(document_data.keys())}")
+        
+        # Create document
+        print(f"[SURVEY] Creating document in {SURVEY_COLLECTION} collection")
+        print(f"[SURVEY] DATABASE_ID={DATABASE_ID}, SURVEY_COLLECTION={SURVEY_COLLECTION}")
+        print(f"[SURVEY] APPWRITE_AVAILABLE={APPWRITE_AVAILABLE}")
         
         result = databases.create_document(
             database_id=DATABASE_ID,
@@ -2005,9 +2089,22 @@ async def submit_survey(
             data=document_data
         )
         
+        print(f"[SURVEY] SUCCESS: Survey submitted with id={result.get('$id')}")
         return {"message": "Survey submitted successfully", "id": result['$id']}
+    except json.JSONDecodeError as e:
+        error_msg = f"JSON serialization error: {str(e)}"
+        print(f"[SURVEY] JSON ERROR: {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
+    except ValueError as e:
+        error_msg = f"Validation error: {str(e)}"
+        print(f"[SURVEY] VALIDATION ERROR: {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"[SURVEY] CRITICAL ERROR: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.get("/evaluation/report/{period}")
@@ -2789,32 +2886,39 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
 
 @app.get("/users/search")
 async def search_users(query: str, user_id: str = Depends(get_user_id)):
-    """Search user profiles by email or user ID."""
+    """Search user profiles by email, name, or user ID using fuzzy matching."""
     try:
         results = []
-        seen_ids = set()
-
-        for search_query in [
-            Query.equal("email", query),
-            Query.equal("user_id", query),
-        ]:
-            result = databases.list_documents(
-                database_id=DATABASE_ID,
-                collection_id=USERS_COLLECTION,
-                queries=[search_query]
-            )
-            for doc in result.get("documents", []):
-                doc_id = doc.get("$id")
-                if doc_id in seen_ids:
-                    continue
-                seen_ids.add(doc_id)
+        
+        # Fetch a reasonable batch of users
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.limit(100)]
+        )
+        
+        query_lower = query.lower().strip()
+        
+        for doc in result.get("documents", []):
+            doc_email = (doc.get("email") or "").lower()
+            doc_name = (doc.get("display_name") or doc.get("name") or "").lower()
+            doc_uid = (doc.get("user_id") or "").lower()
+            
+            # Fuzzy match: if query is a substring of any of these fields
+            if query_lower in doc_email or query_lower in doc_name or query_lower in doc_uid:
                 results.append({
-                    "id": doc_id,
+                    "id": doc.get("$id"),
                     "user_id": doc.get("user_id"),
                     "email": doc.get("email"),
                     "display_name": doc.get("display_name") or doc.get("name"),
                     "timezone": doc.get("timezone", "UTC"),
                 })
+
+        # Return exact matches first, then partial matches
+        results.sort(key=lambda x: (
+            0 if x['email'].lower() == query_lower or (x['user_id'] and x['user_id'].lower() == query_lower) else 1,
+            x['email']
+        ))
 
         return results
     except Exception as e:
@@ -3141,6 +3245,59 @@ async def list_group_tasks(group_id: str, user_id: str = Depends(get_user_id)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+GROUP_MESSAGES_COLLECTION = os.getenv('APPWRITE_COLLECTION_ID_GROUP_MESSAGES', 'group_messages_collection')
+
+@app.post("/groups/{group_id}/messages")
+async def send_group_message(group_id: str, payload: GroupMessageCreate, user_id: str = Depends(get_user_id)):
+    try:
+        _get_group_accessible_doc(group_id, user_id)
+        data = {
+            "group_id": group_id,
+            "sender_id": user_id,
+            "message": payload.message,
+            "created_at": datetime.now().isoformat(),
+        }
+        result = databases.create_document(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_MESSAGES_COLLECTION,
+            document_id=ID.unique(),
+            data=data,
+        )
+        return {"id": result["$id"], **data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/groups/{group_id}/messages")
+async def get_group_messages(group_id: str, user_id: str = Depends(get_user_id)):
+    try:
+        _get_group_accessible_doc(group_id, user_id)
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=GROUP_MESSAGES_COLLECTION,
+            queries=[
+                Query.equal("group_id", group_id),
+                Query.order_asc("created_at"),
+                Query.limit(100)
+            ],
+        )
+        messages = []
+        for doc in result.get("documents", []):
+            messages.append({
+                "id": doc.get("$id"),
+                "group_id": doc.get("group_id"),
+                "sender_id": doc.get("sender_id"),
+                "message": doc.get("message"),
+                "created_at": doc.get("created_at")
+            })
+        return messages
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 # ==================== Google Calendar Integration ====================
 
@@ -3352,16 +3509,23 @@ async def sync_google_calendar(payload: GoogleCalendarSyncRequest, user_id: str 
 @app.get("/ai/tips")
 async def get_ai_tips(user_id: str = Depends(get_user_id)):
     """Get AI-generated productivity tips"""
-    return [
-        {"tip": "Break large tasks into smaller, manageable sub-tasks", "category": "productivity"},
-        {"tip": "Schedule your most challenging work during your peak energy hours", "category": "energy"},
-        {"tip": "Take short breaks every 25-30 minutes to maintain focus", "category": "focus"},
-        {"tip": "Review your schedule the night before for better planning", "category": "planning"},
-        {"tip": "Prioritize tasks based on both urgency and importance", "category": "prioritization"},
-        {"tip": "Set realistic deadlines to avoid stress and burnout", "category": "stress"},
-        {"tip": "Use the Pomodoro technique for better time management", "category": "productivity"},
-        {"tip": "Allocate specific time blocks for different task categories", "category": "planning"}
-    ]
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        prompt = "Provide exactly 3 concise productivity tips for a student. Format the response as a valid JSON array of objects, where each object has a 'tip' (string) and a 'category' (string like 'focus', 'planning', or 'energy')."
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+        return json.loads(text)
+    except Exception as e:
+        print(f"Gemini AI error: {e}")
+        return [
+            {"tip": "Break large tasks into smaller, manageable sub-tasks", "category": "productivity"},
+            {"tip": "Schedule your most challenging work during your peak energy hours", "category": "energy"},
+            {"tip": "Take short breaks every 25-30 minutes to maintain focus", "category": "focus"}
+        ]
 
 
 @app.post("/ai/task-suggestions")
@@ -3374,6 +3538,30 @@ async def get_task_suggestions(user_id: str = Depends(get_user_id)):
             queries=[Query.equal('user_id', user_id), Query.not_equal('status', 'completed')]
         )
         tasks = result.get('documents', [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    if not tasks:
+        return []
+        
+    try:
+        tasks_data = [{"id": t['$id'], "title": t.get('title'), "category": t.get('category')} for t in tasks[:5]]
+        prompt = f"Given these tasks: {json.dumps(tasks_data)}, provide a practical suggestion for each task. Return a valid JSON array of objects. Each object must have 'task_id' (string matching the provided id), 'suggestion' (string), and 'priority' (integer 1-5)."
+        
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+            
+        parsed = json.loads(text)
+        if not isinstance(parsed, list):
+            raise ValueError("Response is not a JSON list")
+        return parsed
+    except Exception as e:
+        print(f"Gemini AI task suggestion error: {e}")
         suggestions = []
         for task in tasks[:5]:
             priority = task.get('priority', 3)
@@ -3381,10 +3569,8 @@ async def get_task_suggestions(user_id: str = Depends(get_user_id)):
             suggestion_text = "Consider breaking this into smaller study sessions" if category == 'academic' else \
                              "Schedule this during your leisure time" if category == 'personal' else \
                              "Allocate dedicated focus time for this task"
-            suggestions.append({"task_id": task['$id'], "suggestion": suggestion_text, "priority": 6 - priority})
+            suggestions.append({"task_id": task['$id'], "suggestion": suggestion_text, "priority": max(1, min(5, 6 - priority))})
         return suggestions
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== Health Check ====================

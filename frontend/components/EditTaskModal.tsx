@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Task, TaskCategory, TaskPriority, EnergyLevel, TaskStatus } from "@/types/task";
+import { Task, TaskCategory, EnergyLevel, TaskStatus } from "@/types/task";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 
 interface EditTaskModalProps {
     task: Task;
@@ -89,8 +90,8 @@ export default function EditTaskModal({ task, isOpen, onClose, onUpdated, onDele
             });
             onUpdated();
             onClose();
-        } catch (err: any) {
-            setError(err.message || "Failed to update task");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to update task");
         } finally {
             setLoading(false);
         }
@@ -106,8 +107,8 @@ export default function EditTaskModal({ task, isOpen, onClose, onUpdated, onDele
             await apiClient.deleteTask(task.id);
             onDeleted();
             onClose();
-        } catch (err: any) {
-            setError(err.message || "Failed to delete task");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to delete task");
         } finally {
             setDeleting(false);
         }

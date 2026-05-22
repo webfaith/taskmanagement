@@ -24,7 +24,7 @@ const LAST_SURVEY_KEY = 'last_survey_date';
 const SURVEY_INTERVAL_DAYS = 7;
 
 export function EvaluationProvider({ children }: { children: ReactNode }) {
-    const { user, userId } = useAuth();
+    const { userId } = useAuth();
     const [taskCompletionCount, setTaskCompletionCount] = useState(0);
     const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 

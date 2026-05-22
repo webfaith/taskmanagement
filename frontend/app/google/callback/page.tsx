@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
 
 export default function GoogleCalendarCallbackPage() {
     const router = useRouter();
-    const searchParams = useSearchParams();
     const { loading } = useAuth();
     const [message, setMessage] = useState("Completing Google Calendar connection...");
 
     useEffect(() => {
         const connect = async () => {
-            const code = searchParams.get("code");
-            const error = searchParams.get("error");
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get("code");
+            const error = params.get("error");
 
             if (error) {
                 setMessage(`Google returned an error: ${error}`);
@@ -41,7 +41,7 @@ export default function GoogleCalendarCallbackPage() {
         };
 
         connect();
-    }, [loading, router, searchParams]);
+    }, [loading, router]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">

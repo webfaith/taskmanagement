@@ -54,7 +54,7 @@ export default function WeeklySurveyPage() {
                     <div className="text-center">
                         <div className="text-6xl mb-4">🎉</div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Weekly Survey Complete!</h2>
-                        <p className="text-gray-600">Here's your effectiveness report for this week</p>
+                        <p className="text-gray-600">Here&apos;s your effectiveness report for this week</p>
                     </div>
                 </div>
 

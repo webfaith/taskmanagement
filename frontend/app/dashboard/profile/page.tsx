@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 import { UserPreferences } from "@/types/task";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
@@ -19,14 +20,7 @@ export default function ProfilePage() {
     const [googleLoading, setGoogleLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<"preferences" | "notifications" | "account">("preferences");
 
-    useEffect(() => {
-        if (user) {
-            fetchPreferences();
-            fetchGoogleStatus();
-        }
-    }, [user]);
-
-    const fetchPreferences = async () => {
+    const fetchPreferences = useCallback(async () => {
         try {
             setLoading(true);
             const data = await apiClient.getUserPreferences();
@@ -34,8 +28,8 @@ export default function ProfilePage() {
             if (data.theme) {
                 setTheme(data.theme);
             }
-        } catch (err: any) {
-            console.error("Failed to fetch preferences:", err);
+        } catch (err: unknown) {
+            console.error("Failed to fetch preferences:", getErrorMessage(err));
             // Set default preferences
             setPreferences({
                 working_hours_start: "09:00",
@@ -51,7 +45,26 @@ export default function ProfilePage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [setTheme]);
+
+    const fetchGoogleStatus = useCallback(async () => {
+        try {
+            setGoogleLoading(true);
+            const status = await apiClient.getGoogleCalendarStatus();
+            setGoogleConnected(status.connected);
+        } catch (err) {
+            console.error("Failed to fetch Google Calendar status:", err);
+        } finally {
+            setGoogleLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            fetchPreferences();
+            fetchGoogleStatus();
+        }
+    }, [user, fetchPreferences, fetchGoogleStatus]);
 
     const handleSavePreferences = async () => {
         if (!preferences) return;
@@ -62,8 +75,8 @@ export default function ProfilePage() {
                 email: user?.email,
                 theme,
             });
-        } catch (err: any) {
-            console.error("Failed to save preferences:", err);
+        } catch (err: unknown) {
+            console.error("Failed to save preferences:", getErrorMessage(err));
         } finally {
             setSaving(false);
         }
@@ -71,18 +84,6 @@ export default function ProfilePage() {
 
     const handleLogout = async () => {
         await logout();
-    };
-
-    const fetchGoogleStatus = async () => {
-        try {
-            setGoogleLoading(true);
-            const status = await apiClient.getGoogleCalendarStatus();
-            setGoogleConnected(status.connected);
-        } catch (err) {
-            console.error("Failed to fetch Google Calendar status:", err);
-        } finally {
-            setGoogleLoading(false);
-        }
     };
 
     const handleConnectGoogleCalendar = async () => {
@@ -234,16 +235,16 @@ export default function ProfilePage() {
                                 When do you have the most energy?
                             </label>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {[
+                                {([
                                     { value: "morning", label: "🌅 Morning", desc: "6 AM - 12 PM" },
                                     { value: "afternoon", label: "☀️ Afternoon", desc: "12 PM - 6 PM" },
                                     { value: "evening", label: "🌆 Evening", desc: "6 PM - 12 AM" },
                                     { value: "split", label: "🔀 Split", desc: "Morning & Evening" },
-                                ].map((option) => (
+                                ] as const).map((option) => (
                                     <button
                                         key={option.value}
                                         onClick={() =>
-                                            setPreferences({ ...preferences, energy_pattern: option.value as any })
+                                            setPreferences({ ...preferences, energy_pattern: option.value })
                                         }
                                         className={`p-3 rounded-lg border text-left transition ${preferences.energy_pattern === option.value
                                                 ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"

@@ -293,7 +293,7 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                                     <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">AI Priority Logic</span>
                                 </div>
                                 <p className="text-sm text-indigo-900 dark:text-indigo-200 italic font-medium">
-                                    "{task.priority_reason}"
+                                    “{task.priority_reason}”
                                 </p>
                             </div>
                         )}

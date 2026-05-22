@@ -71,12 +71,6 @@ export default function CalendarView({
         );
     };
 
-    const isSelected = (date: Date) => {
-        return selectedDate && isToday(date)
-            ? true
-            : selectedDate?.getTime() === date.getTime();
-    };
-
     const navigateMonth = (direction: "prev" | "next") => {
         setCurrentDate((prev) => {
             const newDate = new Date(prev);

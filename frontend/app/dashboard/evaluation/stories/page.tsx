@@ -62,7 +62,7 @@ export default function SuccessStoriesPage() {
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 mb-2">Success Stories</h1>
-                    <p className="text-gray-500">Learn from other students' experiences</p>
+                    <p className="text-gray-500">Learn from other students&apos; experiences</p>
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}

@@ -25,18 +25,17 @@ function applyTheme(theme: ThemeMode) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-    const [theme, setThemeState] = useState<ThemeMode>("system");
-    const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
-
-    useEffect(() => {
+    const [theme, setThemeState] = useState<ThemeMode>(() => {
+        if (typeof window === "undefined") return "system";
         const stored = window.localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
-        const initialTheme: ThemeMode = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-        setThemeState(initialTheme);
-    }, []);
+        return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+    });
+
+    const resolvedTheme = useMemo<"light" | "dark">(() => {
+        return theme === "system" ? getSystemTheme() : theme;
+    }, [theme]);
 
     useEffect(() => {
-        const resolved = theme === "system" ? getSystemTheme() : theme;
-        setResolvedTheme(resolved);
         applyTheme(theme);
 
         if (theme === "system") {

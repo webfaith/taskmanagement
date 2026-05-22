@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
 import Link from "next/link";
 import { PasswordVisibilityToggle } from "@/components/PasswordVisibilityToggle";
+import { getErrorMessage } from "@/lib/error";
 
 export default function RegisterPage() {
     const { register } = useAuth();
@@ -20,8 +21,8 @@ export default function RegisterPage() {
         setLoading(true);
         try {
             await register(email, password, name);
-        } catch (err: any) {
-            setError(err.message || "Failed to register");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to register");
         } finally {
             setLoading(false);
         }

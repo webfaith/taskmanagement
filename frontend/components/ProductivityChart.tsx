@@ -14,7 +14,7 @@ export default function ProductivityChart({ weeklyData, title = "Weekly Producti
     }, [weeklyData]);
 
     const chartData = useMemo(() => {
-        return weeklyData.map((day, index) => {
+        return weeklyData.map((day) => {
             const date = new Date(day.date);
             const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
             return {

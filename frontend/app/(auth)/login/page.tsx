@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
 import Link from "next/link";
 import { PasswordVisibilityToggle } from "@/components/PasswordVisibilityToggle";
+import { getErrorMessage } from "@/lib/error";
 
 export default function LoginPage() {
     const { login } = useAuth();
@@ -19,8 +20,8 @@ export default function LoginPage() {
         setLoading(true);
         try {
             await login(email, password);
-        } catch (err: any) {
-            setError(err.message || "Failed to login");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to login");
         } finally {
             setLoading(false);
         }
@@ -99,7 +100,7 @@ export default function LoginPage() {
             </form>
             <div className="mt-6 text-center text-sm">
                 <span className="text-gray-600 dark:text-gray-400">
-                    Don't have an account?{" "}
+                    Don&apos;t have an account?{" "}
                 </span>
                 <Link
                     href="/register"

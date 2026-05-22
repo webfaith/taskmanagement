@@ -1,11 +1,92 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
-import { Group, GroupTask, Task } from "@/types/task";
+import { Group, GroupTask, Task, GroupMessage } from "@/types/task";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
+
+const UserSearchInput = ({ 
+    value, 
+    onChange, 
+    placeholder,
+    className 
+}: { 
+    value: string; 
+    onChange: (val: string) => void; 
+    placeholder?: string;
+    className?: string;
+}) => {
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [isOpen, setIsOpen] = useState(false);
+    
+    const currentTerm = useMemo(() => {
+        const parts = value.split(',');
+        return parts[parts.length - 1].trim();
+    }, [value]);
+
+    useEffect(() => {
+        if (!currentTerm || currentTerm.length < 2) {
+            setSuggestions([]);
+            setIsOpen(false);
+            return;
+        }
+        
+        const delayDebounceFn = setTimeout(async () => {
+            try {
+                const results = await apiClient.searchUsers(currentTerm);
+                setSuggestions(results);
+                setIsOpen(results.length > 0);
+            } catch (err) {
+                console.error("Search failed", err);
+            }
+        }, 300);
+        
+        return () => clearTimeout(delayDebounceFn);
+    }, [currentTerm]);
+
+    const handleSelect = (user: any) => {
+        const parts = value.split(',');
+        parts.pop();
+        const newStr = parts.length > 0 ? parts.join(', ') + ', ' + user.email : user.email;
+        onChange(newStr + (placeholder?.includes('comma') ? ', ' : ''));
+        setIsOpen(false);
+    };
+
+    return (
+        <div className="relative w-full">
+            <input
+                value={value}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setIsOpen(true);
+                }}
+                onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+                placeholder={placeholder}
+                className={className}
+            />
+            {isOpen && suggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden max-h-60 overflow-y-auto">
+                    {suggestions.map((u) => (
+                        <div 
+                            key={u.id} 
+                            onClick={() => handleSelect(u)}
+                            className="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex flex-col"
+                        >
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                {u.display_name || 'Unnamed'}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {u.email}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function GroupsPage() {
     const { user } = useAuth();
@@ -22,10 +103,59 @@ export default function GroupsPage() {
     const [newMemberEmail, setNewMemberEmail] = useState("");
     const [taskId, setTaskId] = useState("");
     const [assignedTo, setAssignedTo] = useState("");
+    const [chatMessages, setChatMessages] = useState<GroupMessage[]>([]);
+    const [chatInput, setChatInput] = useState("");
+
+    const loadData = useCallback(async () => {
+        try {
+            setLoading(true);
+            const [groupData, taskData] = await Promise.all([
+                apiClient.getGroups(),
+                apiClient.getTasks(),
+            ]);
+            setGroups(groupData);
+            setTasks(taskData);
+            if (!selectedGroupId && groupData.length > 0) {
+                setSelectedGroupId(groupData[0].id);
+            }
+        } catch (err) {
+            console.error("Failed to load groups:", err);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedGroupId]);
+
+    const loadSelectedGroup = async (groupId: string) => {
+        try {
+            const data = await apiClient.getGroup(groupId);
+            setSelectedGroup(data.group);
+            setGroupTasks(data.tasks);
+            const msgs = await apiClient.getGroupMessages(groupId);
+            setChatMessages(msgs);
+            const ids = Array.from(new Set([data.group.owner_id, ...data.group.member_ids]));
+            const directoryEntries = await Promise.all(
+                ids.map(async (id) => {
+                    try {
+                        const matches = await apiClient.searchUsers(id);
+                        const match = matches[0];
+                        return match ? [id, { email: match.email, display_name: match.display_name }] : null;
+                    } catch {
+                        return null;
+                    }
+                })
+            );
+            const directory = Object.fromEntries(directoryEntries.filter(Boolean) as [string, { email: string; display_name?: string | null }][]);
+            setMemberDirectory(directory);
+        } catch (err) {
+            console.error("Failed to load group details:", err);
+        }
+    };
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (user) {
+            loadData();
+        }
+    }, [user, loadData]);
 
     useEffect(() => {
         if (selectedGroupId) {
@@ -34,6 +164,19 @@ export default function GroupsPage() {
             setSelectedGroup(null);
             setGroupTasks([]);
         }
+    }, [selectedGroupId]);
+
+    useEffect(() => {
+        if (!selectedGroupId) return;
+        const interval = setInterval(async () => {
+            try {
+                const msgs = await apiClient.getGroupMessages(selectedGroupId);
+                setChatMessages(msgs);
+            } catch (err) {
+                console.error("Poll failed:", err);
+            }
+        }, 3000);
+        return () => clearInterval(interval);
     }, [selectedGroupId]);
 
     const titleByTaskId = useMemo(() => {
@@ -54,49 +197,6 @@ export default function GroupsPage() {
             }
         }
         return Array.from(new Set(resolved));
-    };
-
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            const [groupData, taskData] = await Promise.all([
-                apiClient.getGroups(),
-                apiClient.getTasks(),
-            ]);
-            setGroups(groupData);
-            setTasks(taskData);
-            if (!selectedGroupId && groupData.length > 0) {
-                setSelectedGroupId(groupData[0].id);
-            }
-        } catch (err) {
-            console.error("Failed to load groups:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const loadSelectedGroup = async (groupId: string) => {
-        try {
-            const data = await apiClient.getGroup(groupId);
-            setSelectedGroup(data.group);
-            setGroupTasks(data.tasks);
-            const ids = Array.from(new Set([data.group.owner_id, ...data.group.member_ids]));
-            const directoryEntries = await Promise.all(
-                ids.map(async (id) => {
-                    try {
-                        const matches = await apiClient.searchUsers(id);
-                        const match = matches[0];
-                        return match ? [id, { email: match.email, display_name: match.display_name }] : null;
-                    } catch {
-                        return null;
-                    }
-                })
-            );
-            const directory = Object.fromEntries(directoryEntries.filter(Boolean) as [string, { email: string; display_name?: string | null }][]);
-            setMemberDirectory(directory);
-        } catch (err) {
-            console.error("Failed to load group details:", err);
-        }
     };
 
     const handleCreateGroup = async () => {
@@ -172,6 +272,18 @@ export default function GroupsPage() {
         }
     };
 
+    const handleSendMessage = async () => {
+        if (!chatInput.trim() || !selectedGroupId) return;
+        try {
+            const msg = await apiClient.sendGroupMessage(selectedGroupId, chatInput);
+            setChatMessages((prev) => [...prev, msg]);
+            setChatInput("");
+        } catch (err) {
+            console.error("Failed to send message:", err);
+            alert("Failed to send message.");
+        }
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -216,9 +328,9 @@ export default function GroupsPage() {
                                     rows={3}
                                     className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
-                                <input
+                                <UserSearchInput
                                     value={newGroup.memberIds}
-                                    onChange={(e) => setNewGroup({ ...newGroup, memberIds: e.target.value })}
+                                    onChange={(val) => setNewGroup({ ...newGroup, memberIds: val })}
                                     placeholder="Member emails or IDs, comma separated"
                                     className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                 />
@@ -311,11 +423,11 @@ export default function GroupsPage() {
                                             )}
                                         </div>
                                         <div className="flex gap-2">
-                                            <input
+                                            <UserSearchInput
                                                 value={newMemberEmail}
-                                                onChange={(e) => setNewMemberEmail(e.target.value)}
+                                                onChange={(val) => setNewMemberEmail(val)}
                                                 placeholder="Add member by email or ID"
-                                                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white w-full"
                                             />
                                             <button
                                                 onClick={handleAddMember}
@@ -333,6 +445,8 @@ export default function GroupsPage() {
                                             <select
                                                 value={taskId}
                                                 onChange={(e) => setTaskId(e.target.value)}
+                                                aria-label="Select task to assign"
+                                                title="Select a task to assign to members"
                                                 className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                                             >
                                                 <option value="">Select a task</option>
@@ -383,6 +497,42 @@ export default function GroupsPage() {
                                                 </div>
                                             ))
                                         )}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 mt-6">
+                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Group Chat</h4>
+                                    <div className="flex flex-col h-64 overflow-y-auto mb-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3 bg-gray-50 dark:bg-gray-900">
+                                        {chatMessages.length === 0 ? (
+                                            <p className="text-sm text-gray-500 text-center mt-auto mb-auto">No messages yet. Say hi!</p>
+                                        ) : (
+                                            chatMessages.map(msg => (
+                                                <div key={msg.id} className={`flex flex-col ${msg.sender_id === user?.$id ? 'items-end' : 'items-start'}`}>
+                                                    <span className="text-xs text-gray-500 mb-1">
+                                                        {memberDirectory[msg.sender_id]?.display_name || msg.sender_id.substring(0, 8)}
+                                                    </span>
+                                                    <div className={`px-4 py-2 rounded-lg text-sm max-w-[80%] break-words ${msg.sender_id === user?.$id ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-bl-none'}`}>
+                                                        {msg.message}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={chatInput}
+                                            onChange={e => setChatInput(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
+                                            placeholder="Type a message..."
+                                            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        />
+                                        <button
+                                            onClick={handleSendMessage}
+                                            disabled={!chatInput.trim()}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+                                        >
+                                            Send
+                                        </button>
                                     </div>
                                 </div>
                             </>

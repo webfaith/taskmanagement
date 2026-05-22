@@ -1,38 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 import { Task } from "@/types/task";
 import CreateTaskModal from "@/components/CreateTaskModal";
 import TaskList from "@/components/TaskList";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function TasksPage() {
     const { user } = useAuth();
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const queryClient = useQueryClient();
 
-    useEffect(() => {
-        if (user) {
-            fetchData();
-        }
-    }, [user]);
+    const { data: tasks = [], isLoading } = useQuery<Task[]>({
+        queryKey: ["tasks"],
+        queryFn: () => apiClient.getTasks(),
+        enabled: !!user,
+        staleTime: 1000 * 60,
+    });
 
-    const fetchData = async () => {
-        try {
-            setLoading(true);
-            const tasksData = await apiClient.getTasks();
-            setTasks(tasksData);
-        } catch (err: any) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+    const createTaskMutation = useMutation({
+        mutationFn: (taskData: Partial<Task>) => apiClient.createTask(taskData),
+        onSuccess: (newTask) => {
+            queryClient.setQueryData<Task[]>(["tasks"], (old = []) => [newTask, ...old]);
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        },
+        onError: (err) => {
+            console.error(getErrorMessage(err));
+        },
+    });
+
+    const handleCreateTask = async (taskData: Partial<Task>) => {
+        await createTaskMutation.mutateAsync(taskData);
     };
-
-    const handleTaskUpdate = () => fetchData();
 
     return (
         <div className="max-w-7xl mx-auto py-6">
@@ -56,7 +59,7 @@ export default function TasksPage() {
                 </button>
             </header>
 
-            {loading ? (
+            {isLoading ? (
                 <div className="flex items-center justify-center h-64 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                     <div className="flex flex-col items-center gap-3">
                         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
@@ -68,8 +71,8 @@ export default function TasksPage() {
                     <div className="p-1 sm:p-6">
                         <TaskList
                             tasks={tasks}
-                            onUpdate={handleTaskUpdate}
-                            onDelete={handleTaskUpdate}
+                            onUpdate={() => queryClient.invalidateQueries({ queryKey: ["tasks"] })}
+                            onDelete={() => queryClient.invalidateQueries({ queryKey: ["tasks"] })}
                             showFilters={true}
                         />
                     </div>
@@ -79,7 +82,8 @@ export default function TasksPage() {
             <CreateTaskModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                onTaskCreated={handleTaskUpdate}
+                onCreate={handleCreateTask}
+                isSubmitting={createTaskMutation.isMutating}
             />
         </div>
     );

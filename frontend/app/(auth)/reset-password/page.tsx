@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PasswordVisibilityToggle } from "@/components/PasswordVisibilityToggle";
+import { getErrorMessage } from "@/lib/error";
 
 export default function ResetPasswordPage() {
     const { requestPasswordReset, completePasswordReset } = useAuth();
@@ -41,8 +42,8 @@ export default function ResetPasswordPage() {
             const redirectUrl = `${window.location.origin}/reset-password`;
             await requestPasswordReset(email, redirectUrl);
             setMessage("We sent a password reset email. Check your inbox and follow the link.");
-        } catch (err: any) {
-            setError(err.message || "Failed to send reset email");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to send reset email");
         } finally {
             setLoading(false);
         }
@@ -64,8 +65,8 @@ export default function ResetPasswordPage() {
             setMessage("Password updated successfully. You can now sign in.");
             setPassword("");
             setConfirmPassword("");
-        } catch (err: any) {
-            setError(err.message || "Failed to reset password");
+        } catch (err: unknown) {
+            setError(getErrorMessage(err) || "Failed to reset password");
         } finally {
             setLoading(false);
         }

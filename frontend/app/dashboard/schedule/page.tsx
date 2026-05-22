@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
+import { getErrorMessage } from "@/lib/error";
 import { UserSchedule, Task, ScheduleRecommendation } from "@/types/task";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
@@ -23,13 +24,7 @@ export default function SchedulePage() {
         setSelectedDate(today);
     }, []);
 
-    useEffect(() => {
-        if (user && selectedDate) {
-            fetchData();
-        }
-    }, [user, selectedDate]);
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
             const [scheduleData, tasksData] = await Promise.all([
@@ -38,20 +33,26 @@ export default function SchedulePage() {
             ]);
             setSchedule(scheduleData);
             setTasks(tasksData.filter((t) => t.status !== "completed"));
-        } catch (err: any) {
-            console.error("Failed to fetch data:", err);
+        } catch (err: unknown) {
+            console.error("Failed to fetch data:", getErrorMessage(err));
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedDate]);
+
+    useEffect(() => {
+        if (user && selectedDate) {
+            fetchData();
+        }
+    }, [user, selectedDate, fetchData]);
 
     const handleOptimize = async () => {
         try {
             setOptimizing(true);
             const recs = await apiClient.optimizeSchedule(selectedDate);
             setRecommendations(recs);
-        } catch (err: any) {
-            console.error("Failed to optimize schedule:", err);
+        } catch (err: unknown) {
+            console.error("Failed to optimize schedule:", getErrorMessage(err));
         } finally {
             setOptimizing(false);
         }
@@ -63,8 +64,8 @@ export default function SchedulePage() {
             setNewCommitment({ title: "", start: "", end: "" });
             setShowAddCommitment(false);
             fetchData();
-        } catch (err: any) {
-            console.error("Failed to add commitment:", err);
+        } catch (err: unknown) {
+            console.error("Failed to add commitment:", getErrorMessage(err));
         }
     };
 
@@ -72,8 +73,8 @@ export default function SchedulePage() {
         try {
             await apiClient.removeCommitment(selectedDate, title);
             fetchData();
-        } catch (err: any) {
-            console.error("Failed to remove commitment:", err);
+        } catch (err: unknown) {
+            console.error("Failed to remove commitment:", getErrorMessage(err));
         }
     };
 
@@ -331,7 +332,7 @@ export default function SchedulePage() {
                                     <div className="text-center py-12">
                                         <span className="text-4xl">🤖</span>
                                         <p className="text-gray-500 dark:text-gray-400 mt-4">
-                                            Click "Optimize" to get AI-powered scheduling recommendations
+                                            Click &quot;Optimize&quot; to get AI-powered scheduling recommendations
                                         </p>
                                         <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
                                             Based on your energy levels and task priorities

@@ -52,7 +52,6 @@ export default function DashboardLayout({
     ];
 
     const isEvaluationActive = pathname.startsWith('/dashboard/evaluation');
-    const isMobileEvaluationActive = evaluationItems.some(item => pathname === item.href);
     const mobileNavItems = [
         ...navItems,
         { name: "Evaluation", href: "/dashboard/evaluation", icon: "🎯" },

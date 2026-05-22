@@ -122,43 +122,35 @@ function test(name: string, fn: () => void | Promise<void>): void {
     }
 }
 
-function expect(actual: any): {
-    toBe: (expected: any) => void;
-    toHaveLength: (expected: number) => void;
-    toContain: (expected: any) => void;
-    toHaveProperty: (expected: string) => void;
-    toBeGreaterThan: (expected: number) => void;
-    toBeLessThan: (expected: number) => void;
-    truthy: () => void;
-} {
+function expect<T>(actual: T) {
     return {
-        toBe: (expected: any) => {
+        toBe: (expected: T) => {
             if (actual !== expected) {
                 throw new Error(`Expected ${expected} but got ${actual}`);
             }
         },
         toHaveLength: (expected: number) => {
-            if (actual.length !== expected) {
-                throw new Error(`Expected length ${expected} but got ${actual.length}`);
+            if ((actual as { length?: number }).length !== expected) {
+                throw new Error(`Expected length ${expected} but got ${(actual as { length?: number }).length}`);
             }
         },
-        toContain: (expected: any) => {
-            if (!actual.includes(expected)) {
+        toContain: (expected: unknown) => {
+            if (!((actual as { includes?: (value: unknown) => boolean }).includes?.(expected))) {
                 throw new Error(`Expected ${JSON.stringify(actual)} to contain ${expected}`);
             }
         },
         toHaveProperty: (expected: string) => {
-            if (!(expected in actual)) {
+            if (!(expected in (actual as object))) {
                 throw new Error(`Expected object to have property ${expected}`);
             }
         },
         toBeGreaterThan: (expected: number) => {
-            if (!(actual > expected)) {
+            if (!(actual as unknown as number > expected)) {
                 throw new Error(`Expected ${actual} to be greater than ${expected}`);
             }
         },
         toBeLessThan: (expected: number) => {
-            if (!(actual < expected)) {
+            if (!(actual as unknown as number < expected)) {
                 throw new Error(`Expected ${actual} to be less than ${expected}`);
             }
         },
@@ -621,9 +613,11 @@ async function runTests(): Promise<void> {
     }
 }
 
+const testRunner = { runTests };
+
 // Export for use in other modules
 export { mockTasks, mockSchedule, mockNotifications };
-export default { runTests };
+export default testRunner;
 
 // Run tests if executed directly
 runTests();

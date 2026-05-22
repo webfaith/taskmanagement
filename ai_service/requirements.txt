@@ -3,3 +3,4 @@ uvicorn
 appwrite
 python-dotenv
 pydantic
+google-generativeai

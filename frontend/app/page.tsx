@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+
 
 export default function Home() {
-  const [email, setEmail] = useState("");
+  // const [email, setEmail] = useState("");
+
 
   const features = [
     {
@@ -108,21 +109,7 @@ export default function Home() {
               </Link>
             </div>
 
-            {/* Email Signup */}
-            <div className="max-w-md mx-auto">
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="flex-1 px-4 py-3 bg-white/10 text-white rounded-lg border border-white/20 focus:outline-none focus:border-blue-400 placeholder-slate-400"
-                />
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-                  Join
-                </button>
-              </div>
-            </div>
+
           </div>
 
           {/* Dashboard Preview */}
@@ -267,7 +254,7 @@ export default function Home() {
               }
             ].map((testimonial, index) => (
               <div key={index} className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700">
-                <div className="text-blue-400 text-4xl mb-4">"</div>
+                <div className="text-blue-400 text-4xl mb-4">&quot;</div>
                 <p className="text-slate-300 mb-4">{testimonial.quote}</p>
                 <div>
                   <div className="font-semibold text-white">{testimonial.author}</div>

@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import apiClient from "@/lib/api";
-import { TaskCategory, TaskPriority, EnergyLevel } from "@/types/task";
+import { getErrorMessage } from "@/lib/error";
+import { Task, TaskCategory, TaskPriority, EnergyLevel } from "@/types/task";
 
 interface CreateTaskModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onTaskCreated: () => void;
+    onCreate?: (taskData: Partial<Task>) => Promise<void>;
+    onTaskCreated?: (task?: Task) => void;
+    isSubmitting?: boolean;
 }
 
 const CATEGORY_COLORS: Record<TaskCategory, string> = {
@@ -34,7 +37,8 @@ const ENERGY_COLORS: Record<EnergyLevel, string> = {
 export default function CreateTaskModal({
     isOpen,
     onClose,
-    onTaskCreated,
+    onCreate,
+    isSubmitting = false,
 }: CreateTaskModalProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
@@ -56,22 +60,26 @@ export default function CreateTaskModal({
 
     if (!isOpen) return null;
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError("");
 
         try {
-            const taskData = {
+            const taskData: Partial<Task> = {
                 ...formData,
                 tags: formData.tags.split(",").map((t) => t.trim()).filter(Boolean),
                 user_id: user?.$id || "",
             };
 
-            await apiClient.createTask(taskData);
-            onTaskCreated();
+            if (onCreate) {
+                await onCreate(taskData);
+            } else {
+                const createdTask = await apiClient.createTask(taskData);
+                onTaskCreated?.(createdTask);
+            }
+
             onClose();
-            // Reset form
             setFormData({
                 title: "",
                 description: "",
@@ -85,9 +93,9 @@ export default function CreateTaskModal({
                 recurring_rule: "",
                 scheduled_time: "",
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            setError(err.message || "Failed to create task");
+            setError(getErrorMessage(err) || "Failed to create task");
         } finally {
             setLoading(false);
         }
@@ -336,10 +344,10 @@ export default function CreateTaskModal({
                         </button>
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || isSubmitting}
                             className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                         >
-                            {loading ? "Creating..." : "Create Task"}
+                            {loading || isSubmitting ? "Creating..." : "Create Task"}
                         </button>
                     </div>
                 </form>

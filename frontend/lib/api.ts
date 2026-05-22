@@ -1,4 +1,4 @@
-import { Task, TaskFilters, UserSchedule, Notification, ScheduleRecommendation, ProductivityStats, UserPreferences, Group, GroupTask } from '@/types/task';
+import { Task, TaskFilters, UserSchedule, Notification, ScheduleRecommendation, ProductivityStats, UserPreferences, Group, GroupTask, GroupMessage } from '@/types/task';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -594,6 +594,17 @@ class ApiClient {
         return this.request<GroupTask>(`/groups/${groupId}/tasks`, {
             method: 'POST',
             body: JSON.stringify({ task_id: taskId, assigned_to: assignedTo, milestone, progress }),
+        });
+    }
+
+    async getGroupMessages(groupId: string): Promise<GroupMessage[]> {
+        return this.requestWithFallback<GroupMessage[]>(`/groups/${groupId}/messages`, () => []);
+    }
+
+    async sendGroupMessage(groupId: string, message: string): Promise<GroupMessage> {
+        return this.request<GroupMessage>(`/groups/${groupId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ message }),
         });
     }
 }

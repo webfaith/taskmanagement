@@ -14,7 +14,6 @@ export default function CalendarPage() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
     useEffect(() => {
         if (user) {
@@ -27,8 +26,8 @@ export default function CalendarPage() {
             setLoading(true);
             const data = await apiClient.getTasks();
             setTasks(data);
-        } catch (err: any) {
-            console.error("Failed to fetch tasks:", err);
+        } catch (err: unknown) {
+            console.error("Failed to fetch tasks:", err instanceof Error ? err.message : err);
         } finally {
             setLoading(false);
         }
@@ -37,10 +36,6 @@ export default function CalendarPage() {
     const handleDateClick = (date: Date) => {
         // Could open a modal to add a task for the selected date
         console.log("Selected date:", date);
-    };
-
-    const handleTaskClick = (task: Task) => {
-        setSelectedTask(task);
     };
 
     const handleTaskUpdate = () => {
@@ -88,7 +83,6 @@ export default function CalendarPage() {
                 <CalendarView
                     tasks={tasks}
                     onDateClick={handleDateClick}
-                    onTaskClick={handleTaskClick}
                 />
 
                 {/* Legend */}

@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import apiClient from "@/lib/api";
-import { Group, Task } from "@/types/task";
+import { Group, Task, TaskCategory, TaskStatus } from "@/types/task";
 import CalendarView from "@/components/CalendarView";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
 
 export default function SharedCalendarPage() {
-    const { user } = useAuth();
     const [groups, setGroups] = useState<Group[]>([]);
     const [allGroupTasks, setAllGroupTasks] = useState<GroupTaskItem[]>([]);
     const [selectedGroupId, setSelectedGroupId] = useState<string>("");
@@ -28,14 +26,11 @@ export default function SharedCalendarPage() {
         estimated_hours: number;
     }
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const groupsData = await apiClient.getGroups();
+
             setGroups(groupsData);
             if (groupsData.length > 0 && !selectedGroupId) {
                 setSelectedGroupId(groupsData[0].id);
@@ -78,7 +73,11 @@ export default function SharedCalendarPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedGroupId]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     const visibleTasks = useMemo(() => {
         if (!selectedGroupId) return allGroupTasks;
@@ -91,12 +90,12 @@ export default function SharedCalendarPage() {
             id: t.id,
             title: `[${t.groupName}] ${t.title}`,
             description: `Assigned to ${t.assignedTo.length} member(s) · ${t.progress.toFixed(0)}% done`,
-            category: t.category as any,
+            category: t.category as TaskCategory,
             priority: 3,
             deadline: t.deadline,
             estimated_hours: t.estimated_hours,
             energy_level: "medium" as const,
-            status: t.status as any,
+            status: t.status as TaskStatus,
             created_at: "",
             user_id: "",
             tags: [],

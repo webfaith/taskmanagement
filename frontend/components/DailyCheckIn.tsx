@@ -70,7 +70,7 @@ export default function DailyCheckIn({ onComplete }: DailyCheckInProps) {
                 <div className="text-center">
                     <div className="text-6xl mb-4">🌟</div>
                     <h3 className="text-xl font-bold text-gray-800 mb-2">Check-in Complete!</h3>
-                    <p className="text-gray-600 mb-4">Thanks for sharing how you're doing today.</p>
+                    <p className="text-gray-600 mb-4">Thanks for sharing how you&apos;re doing today.</p>
                     {tip && (
                         <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-100">
                             <p className="text-blue-700 text-sm">{tip}</p>
@@ -89,7 +89,7 @@ export default function DailyCheckIn({ onComplete }: DailyCheckInProps) {
             {/* Mood Selection */}
             <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                    How's your mood?
+                    How&apos;s your mood?
                 </label>
                 <div className="flex justify-between gap-2">
                     {MOODS.map((m) => (
