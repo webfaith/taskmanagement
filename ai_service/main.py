@@ -445,7 +445,7 @@ class DatabasesWrapper:
 
         if callable(attr):
             def wrapper(*args, **kwargs):
-                if 'database_id' in kwargs:
+                if 'database_id' in kwargs and type(self.service).__name__ == 'FakeTablesDB':
                     kwargs.pop('database_id')
                 if 'collection_id' in kwargs:
                     kwargs['table_id'] = kwargs.pop('collection_id')
