@@ -83,7 +83,7 @@ export default function TasksPage() {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onCreate={handleCreateTask}
-                isSubmitting={createTaskMutation.isMutating}
+                isSubmitting={createTaskMutation.isPending}
             />
         </div>
     );

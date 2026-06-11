@@ -24,8 +24,10 @@ try:
     from appwrite.query import Query
     from appwrite.id import ID
     from appwrite.services.tables_db import TablesDB
+    from appwrite.exception import AppwriteException
 except ImportError:
     APPWRITE_AVAILABLE = False
+    class AppwriteException(Exception): pass
 
     class Client:  # type: ignore[no-redef]
         def set_endpoint(self, *_args, **_kwargs):
@@ -459,7 +461,25 @@ class DatabasesWrapper:
                 if APPWRITE_AVAILABLE and 'database_id' in _sig.parameters and 'database_id' not in kwargs:
                     kwargs['database_id'] = DATABASE_ID
 
-                result = attr(*args, **kwargs)
+                import time
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        result = attr(*args, **kwargs)
+                        break
+                    except KeyError as e:
+                        if str(e) == "'content-type'":
+                            if attempt < max_retries - 1:
+                                time.sleep(1)
+                                continue
+                            raise Exception("Appwrite connection failed: rate limit or network error.")
+                        raise
+                    except Exception as e:
+                        # Catch AppwriteException (like 429) and retry
+                        if attempt < max_retries - 1:
+                            time.sleep(1)
+                            continue
+                        raise
 
                 if hasattr(result, 'rows'):
                     d = {'total': getattr(result, 'total', 0), 'documents': []}
