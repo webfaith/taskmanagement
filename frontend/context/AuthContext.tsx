@@ -119,6 +119,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 console.warn("[AuthContext] Could not generate JWT:", jwtError);
             }
             
+            try {
+                console.log("[AuthContext] Syncing user profile with database...");
+                await apiClient.syncUserProfile(currentUser.email, currentUser.name);
+            } catch (syncError) {
+                console.warn("[AuthContext] Failed to sync user profile:", syncError);
+            }
+            
             console.log("[AuthContext] Login successful, redirecting to dashboard...");
             router.push("/dashboard");
         } catch (error: unknown) {

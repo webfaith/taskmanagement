@@ -678,6 +678,11 @@ class GroupMessageCreate(BaseModel):
     message: str
 
 
+class UserProfileSync(BaseModel):
+    email: str
+    display_name: Optional[str] = None
+
+
 class GoogleCalendarCallback(BaseModel):
     code: str
     redirect_uri: Optional[str] = None
@@ -2883,6 +2888,39 @@ async def get_user_preferences(user_id: str = Depends(get_user_id)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/users/sync")
+async def sync_user_profile(payload: UserProfileSync, user_id: str = Depends(get_user_id)):
+    """Ensure the user's profile exists in the users_collection database."""
+    try:
+        # Check if user exists in collection
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            queries=[Query.equal('user_id', user_id)]
+        )
+        if result.get("documents"):
+            return {"status": "already_exists", "user_id": user_id}
+            
+        # Create user profile
+        data = {
+            "user_id": user_id,
+            "email": payload.email,
+            "display_name": payload.display_name or payload.email.split('@')[0],
+            "timezone": "UTC",
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        result = databases.create_document(
+            database_id=DATABASE_ID,
+            collection_id=USERS_COLLECTION,
+            document_id=ID.unique(),
+            data=data
+        )
+        return {"status": "created", "user_id": user_id}
+    except AppwriteException as e:
+        raise HTTPException(status_code=500, detail=f"Appwrite DB Error: {e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/users/search")
 async def search_users(query: str, user_id: str = Depends(get_user_id)):

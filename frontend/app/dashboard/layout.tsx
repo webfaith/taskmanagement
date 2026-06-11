@@ -15,6 +15,9 @@ export default function DashboardLayout({
     const router = useRouter();
     const pathname = usePathname();
     const [evaluationOpen, setEvaluationOpen] = useState(false);
+    const [adminOpen, setAdminOpen] = useState(false);
+
+    const isAdmin = user?.email === 'digitalverify23@gmail.com' || user?.email === 'peterkehindeademola@gmail.com';
 
     useEffect(() => {
         if (!loading && !user) {
@@ -52,11 +55,24 @@ export default function DashboardLayout({
     ];
 
     const isEvaluationActive = pathname.startsWith('/dashboard/evaluation');
+    
+    const adminItems = [
+        { name: "Overview", href: "/dashboard/admin", icon: "🛠️" },
+        { name: "Monitor Users", href: "/dashboard/admin/users", icon: "👥" },
+        { name: "Manage Categories", href: "/dashboard/admin/categories", icon: "📁" },
+        { name: "Generate Reports", href: "/dashboard/admin/reports", icon: "📊" },
+        { name: "Send Notifications", href: "/dashboard/admin/notifications", icon: "🔔" },
+    ];
+    const isAdminActive = pathname.startsWith('/dashboard/admin');
+
     const mobileNavItems = [
         ...navItems,
         { name: "Evaluation", href: "/dashboard/evaluation", icon: "🎯" },
         { name: "Profile", href: "/dashboard/profile", icon: "👤" },
     ];
+    if (isAdmin) {
+        mobileNavItems.splice(mobileNavItems.length - 1, 0, { name: "Admin", href: "/dashboard/admin", icon: "🛠️" });
+    }
 
     return (
         <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -119,6 +135,45 @@ export default function DashboardLayout({
                             </div>
                         )}
                     </div>
+
+                    {/* Admin Dropdown */}
+                    {isAdmin && (
+                        <div className="mt-4">
+                            <button
+                                onClick={() => setAdminOpen(!adminOpen)}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${isAdminActive
+                                    ? "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400"
+                                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                    }`}
+                            >
+                                <div className="flex items-center">
+                                    <span className="mr-3">🛠️</span>
+                                    <span className="font-medium">Admin</span>
+                                </div>
+                                <span className={`transition-transform ${adminOpen ? 'rotate-180' : ''}`}>▼</span>
+                            </button>
+                            {adminOpen && (
+                                <div className="mt-2 ml-4 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-4">
+                                    {adminItems.map((item) => {
+                                        const isActive = pathname === item.href;
+                                        return (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                className={`flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${isActive
+                                                    ? "bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400"
+                                                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                                    }`}
+                                            >
+                                                <span className="mr-2">{item.icon}</span>
+                                                <span>{item.name}</span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <Link
                         href="/dashboard/profile"

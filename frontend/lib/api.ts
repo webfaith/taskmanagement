@@ -537,6 +537,13 @@ class ApiClient {
         );
     }
 
+    async syncUserProfile(email: string, displayName?: string): Promise<{ status: string }> {
+        return this.request<{ status: string }>('/users/sync', {
+            method: 'POST',
+            body: JSON.stringify({ email, display_name: displayName }),
+        });
+    }
+
     // Group collaboration
     async getGroups(): Promise<Group[]> {
         return this.requestWithFallback<Group[]>('/groups', () => createDemoGroups());
