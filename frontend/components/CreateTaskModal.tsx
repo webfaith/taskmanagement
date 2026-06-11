@@ -126,10 +126,11 @@ export default function CreateTaskModal({
 
                     {/* Title */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="task_title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Title <span className="text-red-500">*</span>
                         </label>
                         <input
+                            id="task_title"
                             type="text"
                             required
                             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
@@ -143,10 +144,11 @@ export default function CreateTaskModal({
 
                     {/* Description */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="task_description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Description
                         </label>
                         <textarea
+                            id="task_description"
                             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition resize-none h-24"
                             value={formData.description}
                             onChange={(e) =>
@@ -159,10 +161,11 @@ export default function CreateTaskModal({
                     {/* Category and Priority Row */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="task_category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Category <span className="text-red-500">*</span>
                             </label>
                             <select
+                                id="task_category"
                                 className={`w-full px-4 py-2.5 rounded-lg border bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition ${CATEGORY_COLORS[formData.category]}`}
                                 value={formData.category}
                                 onChange={(e) =>
@@ -179,10 +182,11 @@ export default function CreateTaskModal({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="task_priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Priority <span className="text-red-500">*</span>
                             </label>
                             <select
+                                id="task_priority"
                                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
                                 value={formData.priority}
                                 onChange={(e) =>
@@ -204,10 +208,11 @@ export default function CreateTaskModal({
                     {/* Deadline and Estimated Hours Row */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="task_deadline" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Deadline <span className="text-red-500">*</span>
                             </label>
                             <input
+                                id="task_deadline"
                                 type="datetime-local"
                                 required
                                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
@@ -219,10 +224,11 @@ export default function CreateTaskModal({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="task_estimated_hours" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Est. Hours <span className="text-red-500">*</span>
                             </label>
                             <input
+                                id="task_estimated_hours"
                                 type="number"
                                 min="0.5"
                                 step="0.5"
@@ -265,10 +271,11 @@ export default function CreateTaskModal({
 
                     {/* Tags */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="task_tags" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Tags
                         </label>
                         <input
+                            id="task_tags"
                             type="text"
                             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
                             value={formData.tags}
@@ -281,10 +288,11 @@ export default function CreateTaskModal({
 
                     {/* Scheduled Time */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <label htmlFor="task_scheduled_time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Schedule for Specific Time
                         </label>
                         <input
+                            id="task_scheduled_time"
                             type="datetime-local"
                             className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
                             value={formData.scheduled_time}
@@ -315,10 +323,11 @@ export default function CreateTaskModal({
 
                     {formData.is_recurring && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label htmlFor="task_recurring_rule" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                 Recurring Rule
                             </label>
                             <select
+                                id="task_recurring_rule"
                                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition"
                                 value={formData.recurring_rule}
                                 onChange={(e) =>
