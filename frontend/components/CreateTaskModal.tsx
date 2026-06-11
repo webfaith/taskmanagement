@@ -38,6 +38,7 @@ export default function CreateTaskModal({
     isOpen,
     onClose,
     onCreate,
+    onTaskCreated,
     isSubmitting = false,
 }: CreateTaskModalProps) {
     const { user } = useAuth();
