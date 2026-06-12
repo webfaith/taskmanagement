@@ -8,7 +8,7 @@ import { ProductivityStats, TaskCategory, TaskPriority } from "@/types/task";
 import ProductivityChart from "@/components/ProductivityChart";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import Link from "next/link";
-import { getBalanceScore, getEffectivenessReport, getAIInsights } from "@/lib/evaluation";
+import { getBalanceScore, getEffectivenessReport } from "@/lib/evaluation";
 import { BalanceScore, EffectivenessReport } from "@/types/evaluation";
 
 export default function AnalyticsPage() {
@@ -16,7 +16,7 @@ export default function AnalyticsPage() {
     const [stats, setStats] = useState<ProductivityStats | null>(null);
     const [balance, setBalance] = useState<BalanceScore | null>(null);
     const [report, setReport] = useState<EffectivenessReport | null>(null);
-    const [insights, setInsights] = useState<string[]>([]);
+    const [aiInsights, setAIInsights] = useState<{ summary: string; nudges: string[] } | null>(null);
     const [loading, setLoading] = useState(true);
     const [timeRange, setTimeRange] = useState<"week" | "month" | "year">("week");
 
@@ -75,11 +75,11 @@ export default function AnalyticsPage() {
             const [balanceData, reportData, insightsData] = await Promise.all([
                 getBalanceScore(),
                 getEffectivenessReport('weekly'),
-                getAIInsights(),
+                apiClient.getAIInsights(),
             ]);
             setBalance(balanceData);
             setReport(reportData);
-            setInsights(insightsData);
+            setAIInsights(insightsData);
         } catch (err) {
             console.error("Failed to fetch evaluation data:", err);
             // Mock data
@@ -105,11 +105,14 @@ export default function AnalyticsPage() {
                     "Consider adjusting your schedule for peak energy hours"
                 ]
             });
-            setInsights([
-                "You're most productive on Tuesdays",
-                "Your time estimates are 15% optimistic",
-                "Consider more personal time on weekends"
-            ]);
+            setAIInsights({
+                summary: "You are doing great this week! You have completed most of your tasks.",
+                nudges: [
+                    "You're most productive on Tuesdays",
+                    "Your time estimates are 15% optimistic",
+                    "Consider more personal time on weekends"
+                ]
+            });
         }
     };
 
@@ -181,6 +184,7 @@ export default function AnalyticsPage() {
                         </div>
                         <div className="flex items-center gap-4">
                             <select
+                                title="Time Range"
                                 value={timeRange}
                                 onChange={(e: ChangeEvent<HTMLSelectElement>) => setTimeRange(e.target.value as "week" | "month" | "year")}
                                 className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
@@ -344,17 +348,19 @@ export default function AnalyticsPage() {
                 )}
 
                 {/* AI Insights */}
-                {insights.length > 0 && (
+                {aiInsights && (
                     <div className="mb-8">
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                            ✨ AI Insights
+                            ✨ AI Productivity Coach
                         </h3>
                         <div className="bg-linear-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-6">
+                            <p className="text-gray-700 dark:text-gray-300 mb-4 whitespace-pre-wrap">{aiInsights.summary}</p>
+                            <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Actionable Nudges:</h4>
                             <ul className="space-y-3">
-                                {insights.map((insight, index) => (
+                                {aiInsights.nudges.map((nudge, index) => (
                                     <li key={index} className="flex items-start gap-3 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
                                         <span className="text-purple-500 mt-1">💡</span>
-                                        <span className="text-gray-700 dark:text-gray-300">{insight}</span>
+                                        <span className="text-gray-700 dark:text-gray-300">{nudge}</span>
                                     </li>
                                 ))}
                             </ul>

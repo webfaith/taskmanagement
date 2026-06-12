@@ -43,6 +43,7 @@ export default function CreateTaskModal({
 }: CreateTaskModalProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [isEstimating, setIsEstimating] = useState(false);
     const [error, setError] = useState("");
 
     const [formData, setFormData] = useState({
@@ -60,6 +61,28 @@ export default function CreateTaskModal({
     });
 
     if (!isOpen) return null;
+
+    const handleAutoEstimate = async () => {
+        if (!formData.title) {
+            setError("Please enter a title before estimating.");
+            return;
+        }
+        setIsEstimating(true);
+        setError("");
+        try {
+            const estimate = await apiClient.estimateTask(formData.title, formData.description);
+            setFormData(prev => ({
+                ...prev,
+                estimated_hours: estimate.estimated_hours,
+                energy_level: estimate.energy_level as EnergyLevel,
+            }));
+        } catch (err) {
+            console.error("Auto-estimate failed:", err);
+            setError("Failed to auto-estimate time and energy.");
+        } finally {
+            setIsEstimating(false);
+        }
+    };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -224,9 +247,19 @@ export default function CreateTaskModal({
                         </div>
 
                         <div>
-                            <label htmlFor="task_estimated_hours" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Est. Hours <span className="text-red-500">*</span>
-                            </label>
+                            <div className="flex items-center justify-between mb-1">
+                                <label htmlFor="task_estimated_hours" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Est. Hours <span className="text-red-500">*</span>
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={handleAutoEstimate}
+                                    disabled={isEstimating || !formData.title}
+                                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 disabled:opacity-50 transition"
+                                >
+                                    {isEstimating ? "⏳ Estimating..." : "✨ Auto-estimate"}
+                                </button>
+                            </div>
                             <input
                                 id="task_estimated_hours"
                                 type="number"

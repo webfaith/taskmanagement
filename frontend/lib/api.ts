@@ -304,7 +304,40 @@ class ApiClient {
         }
     }
 
+    async chatWithAI(message: string, context?: string): Promise<{ response: string }> {
+        return this.request<{ response: string }>('/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message, context }),
+        });
+    }
+
+    async getAIInsights(): Promise<{ summary: string; nudges: string[] }> {
+        return this.request<{ summary: string; nudges: string[] }>('/analytics/ai-insights', {
+            method: 'GET',
+        });
+    }
+
+    async parseDocument(text: string): Promise<{ tasks: Partial<Task>[] }> {
+        return this.request<{ tasks: Partial<Task>[] }>('/tasks/parse-document', {
+            method: 'POST',
+            body: JSON.stringify({ text }),
+        });
+    }
+
+    async estimateTask(title: string, description?: string): Promise<{ estimated_hours: number; energy_level: string }> {
+        return this.request<{ estimated_hours: number; energy_level: string }>('/tasks/estimate', {
+            method: 'POST',
+            body: JSON.stringify({ title, description }),
+        });
+    }
+
     // Task operations
+    async breakdownTask(taskId: string): Promise<{ subtasks: string[], new_description: string }> {
+        return this.request<{ subtasks: string[], new_description: string }>(`/tasks/${taskId}/breakdown`, {
+            method: 'POST',
+        });
+    }
+
     async createTask(task: Partial<Task>): Promise<Task> {
         return this.request<Task>('/tasks', {
             method: 'POST',
@@ -363,11 +396,12 @@ class ApiClient {
     }
 
     async optimizeSchedule(date: string): Promise<ScheduleRecommendation[]> {
-        return this.requestWithFallback<ScheduleRecommendation[]>(
+        const response = await this.requestWithFallback<any>(
             `/schedule/optimize/${date}`,
-            () => createDemoRecommendations(date),
+            () => ({ optimized_tasks: createDemoRecommendations(date) }),
             { method: 'POST' }
         );
+        return response.optimized_tasks || [];
     }
 
     async getWorkingHours(): Promise<{ start: string; end: string }> {
@@ -509,13 +543,7 @@ class ApiClient {
         return this.requestWithFallback<Task[]>('/tasks/prioritized', () => createDemoTasks());
     }
 
-    async getAIInsights(): Promise<string[]> {
-        return this.requestWithFallback<string[]>('/evaluation/insights', () => ([
-            'You are most productive earlier in the day.',
-            'Short focus blocks improve completion rates.',
-            'Leave a small buffer between demanding tasks.',
-        ]));
-    }
+
 
     async searchUsers(query: string): Promise<{ id: string; user_id: string; email: string; display_name?: string | null; timezone?: string }[]> {
         const params = new URLSearchParams({ query });

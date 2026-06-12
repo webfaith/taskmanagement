@@ -15,6 +15,7 @@ export default function SchedulePage() {
     const [recommendations, setRecommendations] = useState<ScheduleRecommendation[]>([]);
     const [loading, setLoading] = useState(true);
     const [optimizing, setOptimizing] = useState(false);
+    const [hasOptimized, setHasOptimized] = useState(false);
     const [selectedDate, setSelectedDate] = useState("");
     const [showAddCommitment, setShowAddCommitment] = useState(false);
     const [newCommitment, setNewCommitment] = useState({ title: "", start: "", end: "" });
@@ -51,6 +52,7 @@ export default function SchedulePage() {
             setOptimizing(true);
             const recs = await apiClient.optimizeSchedule(selectedDate);
             setRecommendations(recs);
+            setHasOptimized(true);
         } catch (err: unknown) {
             console.error("Failed to optimize schedule:", getErrorMessage(err));
         } finally {
@@ -127,6 +129,7 @@ export default function SchedulePage() {
                         <div className="flex items-center gap-4">
                             <input
                                 type="date"
+                                title="Select Date"
                                 value={selectedDate}
                                 onChange={(e) => setSelectedDate(e.target.value)}
                                 className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
@@ -328,6 +331,16 @@ export default function SchedulePage() {
                                             </div>
                                         ))}
                                     </div>
+                                ) : hasOptimized ? (
+                                    <div className="text-center py-12">
+                                        <span className="text-4xl">📭</span>
+                                        <p className="text-gray-500 dark:text-gray-400 mt-4">
+                                            No pending tasks found for optimization.
+                                        </p>
+                                        <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                                            Create some tasks to get AI-powered scheduling recommendations.
+                                        </p>
+                                    </div>
                                 ) : (
                                     <div className="text-center py-12">
                                         <span className="text-4xl">🤖</span>
@@ -446,11 +459,13 @@ export default function SchedulePage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         Start Time
                                     </label>
                                     <input
                                         type="time"
+                                        id="start_time"
+                                        title="Start Time"
                                         className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         value={newCommitment.start}
                                         onChange={(e) =>
@@ -459,11 +474,13 @@ export default function SchedulePage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                         End Time
                                     </label>
                                     <input
                                         type="time"
+                                        id="end_time"
+                                        title="End Time"
                                         className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                         value={newCommitment.end}
                                         onChange={(e) =>

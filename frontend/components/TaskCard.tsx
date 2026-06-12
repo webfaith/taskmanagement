@@ -57,6 +57,7 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
     const [loading, setLoading] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
+    const [breakingDown, setBreakingDown] = useState(false);
 
     const categoryStyle = CATEGORY_STYLES[task.category] || CATEGORY_STYLES.academic;
     const priorityColor = PRIORITY_COLORS[task.priority] || "bg-gray-400 text-white";
@@ -117,6 +118,21 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
         }
     };
 
+    const handleBreakdown = async () => {
+        if (breakingDown) return;
+        setBreakingDown(true);
+        try {
+            await apiClient.breakdownTask(task.id);
+            onUpdate();
+            setShowDetails(true); // Open details to show the new subtasks
+        } catch (error) {
+            console.error("Failed to breakdown task:", error);
+            alert("Failed to breakdown task with AI.");
+        } finally {
+            setBreakingDown(false);
+        }
+    };
+
     if (compact) {
         return (
             <div
@@ -126,6 +142,7 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                 <div className="flex items-center gap-3">
                     <input
                         type="checkbox"
+                        title="Mark task complete"
                         checked={task.status === "completed"}
                         onChange={handleStatusChange}
                         onClick={(e) => e.stopPropagation()}
@@ -156,6 +173,7 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
             <div className="flex items-start gap-4">
                 <input
                     type="checkbox"
+                    title="Mark task complete"
                     checked={task.status === "completed"}
                     onChange={handleStatusChange}
                     className="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -175,9 +193,9 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
                     </div>
 
                     {task.description && (
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
+                        <div className="text-sm text-gray-600 dark:text-gray-300 mb-3 whitespace-pre-wrap">
                             {task.description}
-                        </p>
+                        </div>
                     )}
 
                     <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -230,6 +248,14 @@ export default function TaskCard({ task, onUpdate, onDelete, compact = false }: 
 
                 {/* Actions */}
                 <div className="flex flex-col gap-2">
+                    <button
+                        onClick={handleBreakdown}
+                        disabled={breakingDown || loading}
+                        className="p-2 text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition disabled:opacity-50"
+                        title="AI Task Breakdown"
+                    >
+                        {breakingDown ? "⏳" : "✨"}
+                    </button>
                     <button
                         onClick={() => setShowDetails(!showDetails)}
                         className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition"

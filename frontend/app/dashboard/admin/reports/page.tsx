@@ -15,7 +15,7 @@ export default function GenerateReportsPage() {
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="time-range" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time Range</label>
-                            <select id="time-range" className="w-full border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white p-2 border">
+                            <select id="time-range" title="Time Range" className="w-full border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white p-2 border">
                                 <option>Last 7 Days</option>
                                 <option>Last 30 Days</option>
                                 <option>This Month</option>
@@ -35,7 +35,7 @@ export default function GenerateReportsPage() {
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category Filter</label>
-                            <select id="category-filter" className="w-full border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white p-2 border">
+                            <select id="category-filter" title="Category Filter" className="w-full border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 dark:bg-gray-700 dark:text-white p-2 border">
                                 <option>All Categories</option>
                                 <option>Academic</option>
                                 <option>Work</option>

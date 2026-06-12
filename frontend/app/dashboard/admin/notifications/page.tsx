@@ -37,6 +37,8 @@ export default function SendNotificationsPage() {
                         </label>
                         <select
                             id="target-audience"
+                            name="target-audience"
+                            title="Target Audience"
                             value={target}
                             onChange={(e) => setTarget(e.target.value)}
                             className="w-full border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:text-white p-2.5 border"

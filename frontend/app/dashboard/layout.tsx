@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import AIChatWidget from "@/components/AIChatWidget";
 
 export default function DashboardLayout({
     children,
@@ -243,6 +244,7 @@ export default function DashboardLayout({
 
                 {children}
             </main>
+            <AIChatWidget />
         </div>
     );
 }

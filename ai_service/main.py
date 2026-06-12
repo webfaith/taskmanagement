@@ -709,7 +709,19 @@ class GoogleCalendarCallback(BaseModel):
 
 
 class GoogleCalendarSyncRequest(BaseModel):
-    date: Optional[str] = None
+    date: str  # YYYY-MM-DD
+
+class ParseDocumentRequest(BaseModel):
+    text: str
+    context: Optional[str] = None
+
+class EstimateRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[str] = None
 
 
 # ==================== Helper Functions ====================
@@ -3630,6 +3642,187 @@ async def get_task_suggestions(user_id: str = Depends(get_user_id)):
             suggestions.append({"task_id": task['$id'], "suggestion": suggestion_text, "priority": max(1, min(5, 6 - priority))})
         return suggestions
 
+
+# ==================== Advanced AI Features ====================
+
+@app.post("/tasks/{task_id}/breakdown")
+async def breakdown_task(task_id: str, user_id: str = Depends(get_user_id)):
+    """Breakdown a task into subtasks and append as a markdown checklist to description."""
+    try:
+        task = databases.get_document(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            document_id=task_id
+        )
+        if task.get('user_id') != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        title = task.get('title', '')
+        description = task.get('description', '')
+
+        prompt = f"Break down the following task into 3 to 6 actionable sub-tasks for a student.\nTitle: {title}\nDescription: {description}\nReturn ONLY a valid JSON array of strings representing the sub-tasks."
+
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+            
+        subtasks = json.loads(text)
+        if not isinstance(subtasks, list):
+            raise ValueError("Expected JSON array")
+
+        checklist = "\n\n### AI Sub-tasks\n" + "\n".join([f"- [ ] {st}" for st in subtasks])
+        new_description = (description + checklist).strip()
+
+        databases.update_document(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            document_id=task_id,
+            data={
+                'description': new_description,
+                'updated_at': datetime.now().isoformat()
+            }
+        )
+
+        return {"message": "Task broken down successfully", "subtasks": subtasks, "new_description": new_description}
+    except Exception as e:
+        print(f"Gemini AI breakdown error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tasks/parse-document")
+async def parse_document(request: ParseDocumentRequest, user_id: str = Depends(get_user_id)):
+    """Parse syllabus/document text to extract tasks."""
+    try:
+        current_year = datetime.now().year
+        prompt = f"""Extract actionable assignments or tasks from the following syllabus or document text.
+Return ONLY a valid JSON array of objects.
+Each object must have:
+- title (string)
+- description (string)
+- category (string, exactly one of: 'academic', 'personal', 'work')
+- deadline (string, ISO datetime format, infer year if not provided based on {current_year}, or null if no deadline)
+- estimated_hours (float, your best guess based on the task description)
+- energy_level (string, exactly one of: 'high', 'medium', 'low')
+
+Text to parse:
+{request.text[:10000]}
+"""
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+            
+        tasks = json.loads(text)
+        if not isinstance(tasks, list):
+            raise ValueError("Expected JSON array")
+
+        return {"tasks": tasks}
+    except Exception as e:
+        print(f"Gemini AI parse document error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tasks/estimate")
+async def estimate_task(request: EstimateRequest, user_id: str = Depends(get_user_id)):
+    """Estimate effort and energy level for a task."""
+    try:
+        prompt = f"""Estimate the time required and the energy level needed for the following task.
+Return ONLY a valid JSON object.
+The object must have exactly two keys:
+- estimated_hours (float, e.g. 1.5, 3.0)
+- energy_level (string, exactly one of: 'high', 'medium', 'low')
+
+Task Title: {request.title}
+Task Description: {request.description or 'None provided'}
+"""
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+            
+        estimate = json.loads(text)
+        return estimate
+    except Exception as e:
+        print(f"Gemini AI estimate error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/ai-insights")
+async def get_ai_insights(user_id: str = Depends(get_user_id)):
+    """Generate weekly insights and nudges."""
+    try:
+        seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+        
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            queries=[Query.equal('user_id', user_id), Query.limit(100)]
+        )
+        tasks = result.get('documents', [])
+        
+        completed_recently = [t for t in tasks if t.get('status') == 'completed' and t.get('updated_at', '') >= seven_days_ago]
+        pending = [t for t in tasks if t.get('status') != 'completed']
+
+        completed_data = [{"title": t.get('title'), "category": t.get('category')} for t in completed_recently]
+        pending_data = [{"title": t.get('title'), "category": t.get('category')} for t in pending[:10]]
+
+        prompt = f"""You are an AI Productivity Coach for a student.
+Based on their recent activity, generate a brief productivity summary and exactly 3 actionable nudges.
+Recently completed tasks ({len(completed_recently)}): {json.dumps(completed_data)}
+Pending tasks ({len(pending)} total, showing 10): {json.dumps(pending_data)}
+
+Return ONLY a valid JSON object with:
+- summary (string, 2 paragraphs max, encouraging and insightful)
+- nudges (array of strings, exactly 3 actionable tips based on their specific tasks)
+"""
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = response.text
+        if text.startswith("```json"):
+            text = text.split("```json")[1].rsplit("```", 1)[0].strip()
+        elif text.startswith("```"):
+            text = text.split("```")[1].rsplit("```", 1)[0].strip()
+            
+        insights = json.loads(text)
+        return insights
+    except Exception as e:
+        print(f"Gemini AI insights error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat")
+async def chat_with_ai(request: ChatRequest, user_id: str = Depends(get_user_id)):
+    """AI Study Assistant Chat."""
+    try:
+        result = databases.list_documents(
+            database_id=DATABASE_ID,
+            collection_id=TASKS_COLLECTION,
+            queries=[Query.equal('user_id', user_id), Query.limit(50)]
+        )
+        tasks = result.get('documents', [])
+        tasks_summary = json.dumps([{"title": t.get('title'), "status": t.get('status'), "deadline": t.get('deadline')} for t in tasks])
+
+        prompt = f"""You are an AI Study Assistant for a student.
+Be helpful, concise, and encouraging. Use markdown formatting.
+Here are the student's current tasks context: {tasks_summary}
+User's message: {request.message}
+Additional context (if any): {request.context}
+
+Please respond to the user's message.
+"""
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        
+        return {"response": response.text}
+    except Exception as e:
+        print(f"Gemini AI chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== Health Check ====================
 

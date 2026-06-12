@@ -6,6 +6,7 @@ import apiClient from "@/lib/api";
 import { getErrorMessage } from "@/lib/error";
 import { Task } from "@/types/task";
 import CreateTaskModal from "@/components/CreateTaskModal";
+import ImportTasksModal from "@/components/ImportTasksModal";
 import TaskList from "@/components/TaskList";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 export default function TasksPage() {
     const { user } = useAuth();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const queryClient = useQueryClient();
 
     const { data: tasks = [], isLoading } = useQuery<Task[]>({
@@ -37,6 +39,12 @@ export default function TasksPage() {
         await createTaskMutation.mutateAsync(taskData);
     };
 
+    const handleImportTasks = async (tasksData: Partial<Task>[]) => {
+        for (const taskData of tasksData) {
+            await handleCreateTask(taskData);
+        }
+    };
+
     return (
         <div className="max-w-7xl mx-auto py-6">
             {/* Breadcrumbs */}
@@ -51,12 +59,20 @@ export default function TasksPage() {
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">All Tasks</h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1">Manage, filter, and track all your tasks in one place</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="px-6 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition shadow-md flex items-center justify-center gap-2"
-                >
-                    <span className="text-xl leading-none">+</span> New Task
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="px-6 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm flex items-center justify-center gap-2"
+                    >
+                        <span>📝</span> Import Text
+                    </button>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="px-6 py-2.5 bg-linear-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition shadow-md flex items-center justify-center gap-2"
+                    >
+                        <span className="text-xl leading-none">+</span> New Task
+                    </button>
+                </div>
             </header>
 
             {isLoading ? (
@@ -84,6 +100,12 @@ export default function TasksPage() {
                 onClose={() => setIsModalOpen(false)}
                 onCreate={handleCreateTask}
                 isSubmitting={createTaskMutation.isPending}
+            />
+
+            <ImportTasksModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onImported={handleImportTasks}
             />
         </div>
     );
